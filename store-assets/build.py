@@ -71,6 +71,12 @@ FRAME_CSS = """
   }
   .ext-icon { width: 26px; height: 26px; border-radius: 6px; flex: none; }
   .page { height: 226px; background: #fbfbfd; }
+  .doc { padding: 34px 40px; display: flex; flex-direction: column; gap: 13px; }
+  .doc .bar { height: 11px; border-radius: 6px; background: #eceef3; }
+  .doc .w60 { width: 46%; height: 17px; background: #e2e5ec; }
+  .doc .w90 { width: 72%; }
+  .doc .w80 { width: 63%; }
+  .doc .w40 { width: 34%; }
 
   .stamp {
     display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.09em;
@@ -85,7 +91,11 @@ FRAME_CSS = """
     background: #f4edff; color: #6a20d6; border-radius: 999px;
     padding: 6px 13px; font-size: 13px; font-weight: 550;
   }
-""" % {"purple": PURPLE}
+"""
+
+# Plain substitution, not %-formatting: the CSS is full of literal percent signs
+# (gradient stops), which %-formatting would try to read as format specifiers.
+FRAME_CSS = FRAME_CSS.replace("%(purple)s", PURPLE)
 
 # Tab strip contents. Generic titles and colored squares stand in for favicons —
 # no third-party logos or real internal document names.
@@ -130,7 +140,16 @@ def tabstrip(tabs):
     return "".join(out)
 
 
-def window(tabs, url, page_html="", extra_css=""):
+FAUX_PAGE = """
+      <div class="doc">
+        <div class="bar w60"></div>
+        <div class="bar w90"></div>
+        <div class="bar w80"></div>
+        <div class="bar w40"></div>
+      </div>"""
+
+
+def window(tabs, url, page_html=FAUX_PAGE, extra_css="", overlay=""):
     return f"""
     <div class="win">
       <div class="chrome-top">{tabstrip(tabs)}</div>
@@ -140,6 +159,7 @@ def window(tabs, url, page_html="", extra_css=""):
         <img class="ext-icon" src="../icons/icon32.png" alt="" />
       </div>
       <div class="page" style="{extra_css}">{page_html}</div>
+      {overlay}
     </div>"""
 
 
@@ -190,6 +210,10 @@ def write_popup_inner():
     </style>
   </head>
   <body>
+    <div class="views">
+      <button class="seg" aria-pressed="true">Duplicates</button>
+      <button class="seg" aria-pressed="false">Clutter</button>
+    </div>
     <div class="scope">
       <button class="seg" aria-pressed="true">This window</button>
       <button class="seg" aria-pressed="false">All windows</button>
@@ -217,15 +241,19 @@ def write_screenshot_popup():
       <b>one page, three copies</b>.</p>
     </div>
     <div class="stage">
-      {window(TABS_DUPES, "docs.google.com/document/d/&hellip;/edit#heading=h.k2p1", "")}
-      <iframe class="popup" src="demo-popup-inner.html" title="Tab Dedupe popup"></iframe>
+      {window(
+        TABS_DUPES,
+        "docs.google.com/document/d/&hellip;/edit#heading=h.k2p1",
+        extra_css="height: 452px;",
+        overlay='<iframe class="popup" src="demo-popup-inner.html" title="Tab Dedupe popup"></iframe>',
+      )}
     </div>"""
     css = """
-    .stage { position: relative; }
+    /* Anchored to the toolbar, just under the extension icon. */
     .popup {
-      position: absolute; top: 168px; right: 128px;
-      width: 316px; height: 372px; border: 0; border-radius: 12px; background: #fff;
-      box-shadow: 0 20px 46px rgba(22, 20, 46, 0.26), 0 0 0 1px rgba(22, 20, 46, 0.07);
+      position: absolute; top: 74px; right: 14px;
+      width: 316px; height: 436px; border: 0; border-radius: 12px; background: #fff;
+      box-shadow: 0 18px 44px rgba(22, 20, 46, 0.24), 0 0 0 1px rgba(22, 20, 46, 0.08);
     }
     """
     (HERE / "screenshot-1-popup.html").write_text(
@@ -363,6 +391,7 @@ def write_demo_options():
     """Copy of options.html wired to the stub, with asset paths pointed at the root."""
     src = (REPO_ROOT / "options.html").read_text()
     src = src.replace('href="options.css"', 'href="../options.css"')
+    src = src.replace('src="icons/', 'src="../icons/')
     src = src.replace(
         '<script type="module" src="options.js"></script>',
         '<script src="chrome-shim.js"></script>\n'
@@ -373,9 +402,9 @@ def write_demo_options():
 
 def write_screenshot_options():
     body = """    <div class="head">
-      <h1>Every behavior is a checkbox.</h1>
-      <p class="sub">Including <b>per-site rules you can switch off one at a time</b>, and hosts that
-      are never deduped at all.</p>
+      <h1>Four groups. One line each.</h1>
+      <p class="sub">Every behavior is a switch, and the per-site matching rules can be turned off
+      <b>one site at a time</b>.</p>
     </div>
     <div class="stage">
       <div class="frame">
@@ -384,13 +413,12 @@ def write_screenshot_options():
     </div>"""
     css = """
     .frame {
-      width: 1000px; height: 470px; overflow: hidden; border-radius: 14px; background: #fff;
+      width: 1000px; height: 536px; overflow: hidden; border-radius: 14px;
+      background: #f6f6f9;
       box-shadow: 0 24px 60px rgba(22, 20, 46, 0.16), 0 2px 6px rgba(22, 20, 46, 0.07);
     }
-    /* The settings page is taller than the plate; scale it down rather than crop it. */
-    iframe {
-      width: 1430px; height: 1330px; border: 0; transform: scale(0.7); transform-origin: 0 0;
-    }
+    /* Rendered 1:1 and cropped to the plate — no scaling blur on the type. */
+    iframe { width: 1000px; height: 1400px; border: 0; }
     """
     (HERE / "screenshot-4-options.html").write_text(
         page("Options — screenshot source", body, css)
@@ -402,7 +430,7 @@ def write_screenshot_options():
 
 def write_promo_small():
     body = """    <div class="tile">
-      <img src="icon-300.png" alt="" />
+      <span class="plate"><img src="icon-300.png" alt="" /></span>
       <div>
         <div class="name">Tab Dedupe</div>
         <div class="tag">Opens the tab you already have</div>
@@ -417,7 +445,12 @@ def write_promo_small():
       width: 440px; height: 280px; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 18px; text-align: center;
     }
-    .tile img { width: 86px; height: 86px; }
+    /* The icon is purple too, so it needs a light plate to separate from the field. */
+    .plate {
+      display: inline-flex; padding: 13px; border-radius: 26px; background: #fff;
+      box-shadow: 0 12px 30px rgba(38, 0, 84, 0.26);
+    }
+    .tile img { width: 74px; height: 74px; display: block; }
     .name { font-size: 31px; font-weight: 680; color: #fff; letter-spacing: -0.4px; }
     .tag { font-size: 14.5px; color: rgba(255,255,255,0.82); margin-top: 6px; }
     """
@@ -429,7 +462,7 @@ def write_promo_small():
 def write_promo_marquee():
     body = """    <div class="marquee">
       <div class="left">
-        <img src="icon-300.png" alt="" />
+        <span class="plate"><img src="icon-300.png" alt="" /></span>
         <div>
           <div class="name">Tab Dedupe</div>
           <div class="tag">Opens the tab you already have</div>
@@ -451,7 +484,11 @@ def write_promo_marquee():
       gap: 74px; padding: 0 92px;
     }
     .left { display: flex; align-items: center; gap: 26px; flex: none; }
-    .left img { width: 132px; height: 132px; }
+    .plate {
+      display: inline-flex; padding: 20px; border-radius: 38px; background: #fff;
+      box-shadow: 0 16px 40px rgba(38, 0, 84, 0.28);
+    }
+    .left img { width: 116px; height: 116px; display: block; }
     .name { font-size: 50px; font-weight: 680; color: #fff; letter-spacing: -1px; }
     .tag { font-size: 20px; color: rgba(255,255,255,0.84); margin-top: 8px; }
     .points { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 19px; }
@@ -474,7 +511,10 @@ def write_shim():
         """// Screenshot-only stub of the chrome.* APIs the settings page calls.
 // `chrome` is non-configurable on a plain web page, so patch namespaces onto it.
 const stub = {
-  storage: { sync: { get: async (defaults) => defaults, set: async () => {} } },
+  storage: {
+    sync: { get: async (defaults) => defaults, set: async () => {} },
+    session: { get: async () => ({}) },
+  },
   runtime: { sendMessage: async () => ({ count: 4, groups: [] }), openOptionsPage() {} },
   tabs: { create() {} },
   windows: { getCurrent: async () => ({ id: 1 }) },

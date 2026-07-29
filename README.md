@@ -164,6 +164,22 @@ Open the service worker console: `chrome://extensions` → the Tab Dedupe card �
 
 **After editing any file, click Reload on the extension card.** Chrome keeps running the old service worker until you do, which makes a fixed bug look unfixed.
 
+## Publishing
+
+Store artwork and paste-ready listing copy live in [store-assets/](store-assets/) — screenshots,
+promo tiles, the padded store icon, and every permission justification the review form asks for.
+See [STORE-LISTING.md](store-assets/STORE-LISTING.md).
+
+```bash
+python3 store-assets/build.py    # HTML sources at exact required pixel sizes
+python3 store-assets/shoot.py    # headless Chrome captures them, verifies dimensions
+python3 tools/pack.py            # zip just the files Chrome loads
+```
+
+The popup and settings screenshots render the real `popup.css` and `options.html` + `options.js` in an
+iframe, so changing the UI and re-running `shoot.py` updates the listing images. Only the data is
+stubbed.
+
 ## Development
 
 ```bash

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- The extension's own stylesheet, unmodified. -->
+    <link rel="stylesheet" href="../popup.css" />
+    <style>
+      /* Only the scrollbar is suppressed, so the shot isn't a scrollbar photo. */
+      body { overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div class="views">
+      <button class="seg" aria-pressed="true">Duplicates</button>
+      <button class="seg" aria-pressed="false">Clutter</button>
+    </div>
+    <div class="scope">
+      <button class="seg" aria-pressed="true">This window</button>
+      <button class="seg" aria-pressed="false">All windows</button>
+    </div>
+    <p class="summary">4 duplicate tabs &mdash; 3 pages</p>
+    <ul class="list"><li><span class="title">Q3 Planning — draft<span class="host">docs.google.com</span></span><span class="count">3&times;</span></li>
+<li><span class="title">ACME-142: Migration plan<span class="host">example.atlassian.net</span></span><span class="count">2&times;</span></li>
+<li><span class="title">Design system — components<span class="host">figma.com</span></span><span class="count">2&times;</span></li></ul>
+    <button class="primary">Close 4 duplicate tabs</button>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" checked /> Auto-close new duplicate tabs</label>
+    </div>
+    <div class="footer">
+      <button class="link">Let the next tab through</button>
+      <button class="link">Settings</button>
+    </div>
+  </body>
+</html>

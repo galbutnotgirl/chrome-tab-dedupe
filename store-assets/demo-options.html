@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Tab Dedupe — Settings</title>
+    <link rel="stylesheet" href="../options.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="../icons/icon48.png" alt="" width="30" height="30" />
+        <div>
+          <h1>Tab Dedupe</h1>
+          <p>Settings</p>
+        </div>
+      </div>
+      <span class="saved" id="saved">Saved</span>
+    </header>
+
+    <div class="shell">
+      <nav class="nav" id="nav">
+        <a href="#duplicates" class="current">Duplicates</a>
+        <a href="#matching">Same document</a>
+        <a href="#cleanup">Cleanup</a>
+        <a href="#advanced">Advanced</a>
+      </nav>
+
+      <main>
+        <section class="panel" id="duplicates">
+          <h2>Duplicates</h2>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Reuse the tab I already have</span>
+              <span class="desc">Open something twice and the new tab closes instead.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="autoDedupe" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Bring it next to me</span>
+              <span class="desc">The tab moves beside the one you're on.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="moveNextToCurrent" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Search every window</span>
+              <span class="desc">Off: only the window you're in.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="matchAllWindows" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Twice in a row means I meant it</span>
+              <span class="desc">Repeat within 8 seconds and you get a real second copy.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="repeatOpensNewTab" /><span></span></span>
+          </label>
+        </section>
+
+        <section class="panel" id="matching">
+          <h2>Same document</h2>
+          <p class="intro">
+            A link to slide 14 is the same deck you already have open. These rules ignore the part of
+            a URL that only says <em>where</em> you are in a document.
+          </p>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Recognize documents by ID</span>
+              <span class="desc">Off: URLs must match character for character.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="smartRules" /><span></span></span>
+          </label>
+
+          <details id="rulesBox">
+            <summary><span id="rulesCount">Per-site rules</span></summary>
+            <div class="rules" id="rules"></div>
+          </details>
+        </section>
+
+        <section class="panel" id="cleanup">
+          <h2>Cleanup</h2>
+          <p class="intro">
+            The popup's <strong>Clutter</strong> tab ranks tabs you're probably done with. It only
+            proposes — you tick what closes, and Undo brings them back.
+          </p>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">How much to suggest</span>
+              <span class="desc">How readily a tab shows up in the list.</span>
+            </div>
+            <select data-setting="clutterThreshold" data-type="number">
+              <option value="4">A little</option>
+              <option value="3">Normal</option>
+              <option value="2">A lot</option>
+            </select>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Count as idle after</span>
+              <span class="desc">Hours without you looking at it.</span>
+            </div>
+            <input type="number" data-setting="idleAfterHours" data-type="number" min="1" max="72" step="1" />
+          </label>
+
+          <div class="row stack">
+            <div class="text">
+              <span class="label">Tabs I'm usually done with</span>
+              <span class="desc">One phrase per line. Matched loosely against title and address.</span>
+            </div>
+            <textarea id="disposablePatterns" rows="3" spellcheck="false"
+              placeholder="google search&#10;flight status"></textarea>
+          </div>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Start a new trail after</span>
+              <span class="desc">Minutes. Used by <strong>Close related tabs</strong> to know where a trail begins.</span>
+            </div>
+            <input type="number" data-setting="clusterGapMinutes" data-type="number" min="1" max="240" step="1" />
+          </label>
+        </section>
+
+        <section class="panel" id="advanced">
+          <h2>Advanced</h2>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Don't move grouped tabs</span>
+              <span class="desc">Moving one out of a group would remove it from the group.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="respectGroups" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Ignore URL query strings</span>
+              <span class="desc">Blunt — treats two different searches as one page.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="ignoreQuery" /><span></span></span>
+          </label>
+
+          <div class="row stack">
+            <div class="text">
+              <span class="label">Never touch these sites</span>
+              <span class="desc">One host per line. Subdomains included.</span>
+            </div>
+            <textarea id="ignoreHosts" rows="2" spellcheck="false"></textarea>
+          </div>
+
+          <div class="row">
+            <div class="text">
+              <span class="label">Keyboard shortcuts</span>
+              <span class="desc">Close duplicates, and let the next tab through.</span>
+            </div>
+            <button id="shortcuts" class="btn">Change</button>
+          </div>
+        </section>
+
+        <p class="foot">
+          Pinned, grouped, and playing tabs are never closed. Nothing here leaves your browser.
+        </p>
+      </main>
+    </div>
+
+    <script src="chrome-shim.js"></script>
+    <script type="module" src="../options.js"></script>
+  </body>
+</html>
