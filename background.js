@@ -606,6 +606,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     closeWithUndo(msg.ids || [], msg.what || 'close selected').then((count) => respond({ count }));
     return true;
   }
+  if (msg.type === 'focusTab') {
+    // Let the user go look at a proposed tab before deciding to close it.
+    (async () => {
+      const tab = await getTabSafe(msg.tabId);
+      if (!tab) return respond({ ok: false });
+      await chrome.tabs.update(tab.id, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      respond({ ok: true });
+    })().catch((e) => {
+      console.warn(`${LOG} focusTab failed: ${e.message}`);
+      respond({ ok: false });
+    });
+    return true;
+  }
   if (msg.type === 'undo') {
     undoLastClose().then((restored) => respond({ restored }));
     return true;

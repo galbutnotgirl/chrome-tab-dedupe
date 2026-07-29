@@ -147,10 +147,35 @@ button.primary:disabled {
   margin-top: 12px;
 }
 
+.hintRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .hint {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* Clutter rows are clickable: the title opens that tab so you can look first. */
+.list .jump {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.list .jump:hover .titleText {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .list .pick {

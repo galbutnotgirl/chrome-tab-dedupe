@@ -85,19 +85,50 @@ test('a tab you just looked at scores nothing', () => {
   assert.deepEqual(result.reasons, []);
 });
 
-test('idle time accrues by doublings and is capped', () => {
+test('idle time accrues by doublings and is capped below the threshold', () => {
   const at = (h) => scoreTab(tab({ lastAccessed: HOURS(h) }), { activations: 1 }, {}, NOW).score;
   assert.equal(at(1), 0, 'under the threshold');
   assert.equal(at(2), 1);
   assert.equal(at(4), 2);
-  assert.equal(at(8), 3);
-  assert.equal(at(500), 3, 'capped — one signal cannot dominate');
+  assert.equal(at(8), 2, 'capped at 2 — age can never reach the default threshold of 3');
+  assert.equal(at(500), 2, 'a tab idle for weeks is still only old');
 });
 
 test('opened-but-never-viewed is the strongest single signal', () => {
   const result = scoreTab(tab({ lastAccessed: HOURS(3) }), { activations: 0 }, {}, NOW);
   assert.ok(result.reasons.includes('opened but never looked at'));
   assert.equal(result.score, 3, '1 idle + 2 never-viewed');
+  assert.equal(result.intent, 1, 'counts as evidence you are done with it');
+});
+
+test('age alone is never enough to be proposed', () => {
+  // The bug this prevents: with age able to reach the threshold on its own, every
+  // tab older than a few hours got proposed — 97 rows in one popup.
+  const ancient = tab({ id: 9, lastAccessed: HOURS(500) });
+  const result = scoreTab(ancient, { activations: 3 }, {}, NOW);
+  assert.equal(result.intent, 0, 'nothing here says you are finished with it');
+  assert.deepEqual(suggestClosures([ancient], new Map([[9, { activations: 3 }]]), {}, NOW), []);
+});
+
+test('hundreds of old tabs on one site propose nothing', () => {
+  // A docs/mail home is not a research pile. Before this, "106 tabs open on
+  // docs.google.com" added a point to all 106 of them.
+  const tabs = [];
+  const intel = new Map();
+  for (let i = 1; i <= 106; i += 1) {
+    tabs.push(tab({ id: i, url: `https://docs.google.com/document/d/doc${i}/edit`, lastAccessed: HOURS(216) }));
+    intel.set(i, { activations: 2 });
+  }
+  assert.deepEqual(suggestClosures(tabs, intel, {}, NOW), []);
+});
+
+test('a bounded pile still counts, an unbounded one does not', () => {
+  const counts = (n) => new Map([['example.com', n]]);
+  const at = (n) =>
+    scoreTab(tab({ lastAccessed: HOURS(3) }), { activations: 2 }, {}, NOW, { hostCounts: counts(n) }).score;
+  assert.equal(at(3), 1, 'below pileSize: idle only');
+  assert.equal(at(6), 2, 'a real research pile');
+  assert.equal(at(60), 1, 'a site you live in is not a pile');
 });
 
 test('reasons read as English, and days are reported as days', () => {
@@ -105,7 +136,7 @@ test('reasons read as English, and days are reported as days', () => {
   assert.deepEqual(result.reasons, ['untouched for 3d']);
 });
 
-test('a research pile on one site adds a point', () => {
+test('a research pile on one site adds a point (but is not intent by itself)', () => {
   const hostCounts = new Map([['example.com', 6]]);
   const withPile = scoreTab(
     tab({ lastAccessed: HOURS(3) }),
@@ -116,6 +147,7 @@ test('a research pile on one site adds a point', () => {
   );
   assert.ok(withPile.reasons.some((r) => r.includes('6 tabs open on example.com')));
   assert.equal(withPile.score, 2);
+  assert.equal(withPile.intent, 0, 'a pile is context, not evidence');
 });
 
 test('missing intel degrades gracefully instead of assuming never-viewed', () => {
@@ -167,9 +199,9 @@ test('suggestClosures skips non-web tabs entirely', () => {
 test('raising the threshold shrinks the proposal', () => {
   const tabs = [tab({ id: 2, lastAccessed: HOURS(30) })];
   const intel = new Map([[2, { activations: 0 }]]);
-  // This tab scores 5: idle capped at 3, plus 2 for never being viewed.
-  assert.equal(suggestClosures(tabs, intel, { threshold: 5 }, NOW).length, 1);
-  assert.equal(suggestClosures(tabs, intel, { threshold: 6 }, NOW).length, 0);
+  // This tab scores 4: idle capped at 2, plus 2 for never being viewed.
+  assert.equal(suggestClosures(tabs, intel, { threshold: 4 }, NOW).length, 1);
+  assert.equal(suggestClosures(tabs, intel, { threshold: 5 }, NOW).length, 0);
 });
 
 test('an empty browser produces an empty proposal, not a crash', () => {

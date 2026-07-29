@@ -1,6 +1,7 @@
 import { getSettings, setSettings } from './lib/settings.js';
 
-const MAX_ROWS = 6;
+/** Duplicates group by page so the list is short; clutter is per tab, so show more. */
+const MAX_ROWS = { duplicates: 6, clutter: 12 };
 
 const summary = document.getElementById('summary');
 const list = document.getElementById('list');
@@ -9,6 +10,7 @@ const autoBox = document.getElementById('autoDedupe');
 const autoRow = document.getElementById('autoRow');
 const hint = document.getElementById('hint');
 const undoBtn = document.getElementById('undo');
+const selectAllBtn = document.getElementById('selectAll');
 
 // The popup belongs to the browser window it was opened from, so this is the
 // window the "this window" scope means.
@@ -17,8 +19,11 @@ const settings = await getSettings();
 
 let allWindows = Boolean(settings.sweepAllWindows);
 let view = 'duplicates';
-/** Clutter rows the user has unticked — kept so a re-render doesn't re-tick them. */
-let excluded = new Set();
+/**
+ * Clutter is opt-in, not opt-out. Nothing is ticked until you tick it — a
+ * proposal you can't read through is not something to pre-approve.
+ */
+let selected = new Set();
 let clutter = [];
 
 autoBox.checked = Boolean(settings.autoDedupe);
@@ -50,7 +55,7 @@ function renderDuplicates(report) {
   hint.textContent = '';
 
   list.replaceChildren();
-  for (const group of report.groups.slice(0, MAX_ROWS)) {
+  for (const group of report.groups.slice(0, MAX_ROWS.duplicates)) {
     const li = document.createElement('li');
     li.append(titleCell(group.title, group.host));
     const count = document.createElement('span');
@@ -59,43 +64,64 @@ function renderDuplicates(report) {
     li.append(count);
     list.append(li);
   }
-  appendOverflow(report.groups.length);
+  appendOverflow(report.groups.length, MAX_ROWS.duplicates);
 }
 
 // --- clutter view -----------------------------------------------------------
 
+function syncClutterButton() {
+  const n = selected.size;
+  sweepBtn.disabled = n === 0;
+  sweepBtn.textContent = n ? `Close ${plural(n, 'tab')}` : 'Select tabs to close';
+  selectAllBtn.hidden = clutter.length === 0;
+  selectAllBtn.textContent =
+    n === clutter.length && n > 0 ? 'Clear' : `Select all ${clutter.length}`;
+}
+
 function renderClutter(report) {
   clutter = report.suggestions;
-  const n = clutter.filter((s) => !excluded.has(s.id)).length;
+  // Drop selections for tabs that are no longer in the proposal.
+  const live = new Set(clutter.map((s) => s.id));
+  selected = new Set([...selected].filter((id) => live.has(id)));
 
+  const shown = Math.min(clutter.length, MAX_ROWS.clutter);
   summary.textContent = clutter.length
     ? `${plural(clutter.length, 'tab')} you're probably done with`
     : `Nothing stale in ${plural(report.scanned, 'tab')}.`;
-  hint.textContent = clutter.length ? 'Untick anything you want to keep.' : '';
-
-  sweepBtn.disabled = n === 0;
-  sweepBtn.textContent = n ? `Close ${plural(n, 'tab')}` : 'Nothing selected';
+  hint.textContent = clutter.length
+    ? `Click a title to go look at it. Showing ${shown} of ${clutter.length}.`
+    : '';
 
   list.replaceChildren();
-  for (const item of clutter.slice(0, MAX_ROWS)) {
+  for (const item of clutter.slice(0, MAX_ROWS.clutter)) {
     const li = document.createElement('li');
 
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'pick';
-    box.checked = !excluded.has(item.id);
+    box.checked = selected.has(item.id);
     box.addEventListener('change', () => {
-      if (box.checked) excluded.delete(item.id);
-      else excluded.add(item.id);
-      const left = clutter.filter((s) => !excluded.has(s.id)).length;
-      sweepBtn.disabled = left === 0;
-      sweepBtn.textContent = left ? `Close ${plural(left, 'tab')}` : 'Nothing selected';
+      if (box.checked) selected.add(item.id);
+      else selected.delete(item.id);
+      syncClutterButton();
     });
 
-    li.append(box, titleCell(item.title, item.reasons.join(' · ')));
+    // The title is a button, not text: closing a tab you can't inspect first is
+    // a guess. Clicking switches to it (and closes the popup, as Chrome does).
+    const jump = document.createElement('button');
+    jump.className = 'jump';
+    jump.append(titleCell(item.title, item.reasons.join(' · ')));
+    jump.title = 'Go to this tab';
+    jump.addEventListener('click', async () => {
+      await chrome.runtime.sendMessage({ type: 'focusTab', tabId: item.id });
+      window.close();
+    });
+
+    li.append(box, jump);
     list.append(li);
   }
-  appendOverflow(clutter.length);
+  appendOverflow(clutter.length, MAX_ROWS.clutter);
+  syncClutterButton();
 }
 
 // --- shared -----------------------------------------------------------------
@@ -103,7 +129,10 @@ function renderClutter(report) {
 function titleCell(text, sub) {
   const title = document.createElement('span');
   title.className = 'title';
-  title.textContent = text;
+  const main = document.createElement('span');
+  main.className = 'titleText';
+  main.textContent = text;
+  title.append(main);
   title.title = text;
   if (sub) {
     const host = document.createElement('span');
@@ -114,12 +143,12 @@ function titleCell(text, sub) {
   return title;
 }
 
-function appendOverflow(total) {
-  const hidden = total - MAX_ROWS;
+function appendOverflow(total, max) {
+  const hidden = total - max;
   if (hidden <= 0) return;
   const li = document.createElement('li');
   li.className = 'more';
-  li.textContent = `+${hidden} more`;
+  li.textContent = `+${hidden} more — close these, then reopen to see the rest`;
   list.append(li);
 }
 
@@ -129,6 +158,7 @@ async function refresh() {
   if (!undoBtn.hidden) undoBtn.textContent = `Undo (${lastClose.count})`;
 
   autoRow.hidden = view === 'clutter';
+  selectAllBtn.hidden = view !== 'clutter';
   if (view === 'duplicates') renderDuplicates(await ask('report'));
   else renderClutter(await ask('clutter'));
 }
@@ -153,6 +183,13 @@ for (const btn of document.querySelectorAll('[data-scope]')) {
 }
 setPressed('[data-scope]', 'scope', allWindows ? 'all' : 'window');
 
+selectAllBtn.addEventListener('click', () => {
+  if (selected.size === clutter.length) selected.clear();
+  else selected = new Set(clutter.map((s) => s.id));
+  for (const box of list.querySelectorAll('.pick')) box.checked = selected.size > 0;
+  syncClutterButton();
+});
+
 sweepBtn.addEventListener('click', async () => {
   sweepBtn.disabled = true;
   let closed = 0;
@@ -161,10 +198,9 @@ sweepBtn.addEventListener('click', async () => {
     const res = await ask('sweep');
     closed = res && res.count ? res.count : 0;
   } else {
-    const ids = clutter.filter((s) => !excluded.has(s.id)).map((s) => s.id);
-    const res = await ask('closeIds', { ids, what: 'clutter review' });
+    const res = await ask('closeIds', { ids: [...selected], what: 'clutter review' });
     closed = res && res.count ? res.count : 0;
-    excluded = new Set();
+    selected = new Set();
   }
 
   summary.textContent = closed ? `Closed ${plural(closed, 'tab')}.` : 'Nothing closed.';

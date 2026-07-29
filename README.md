@@ -97,18 +97,29 @@ own session history — the popup's Undo link, or right-click the toolbar icon �
 
 The popup's **Clutter** tab ranks open tabs by how likely you're done with them, and shows the reasoning
 for each one — `untouched for 2d · opened but never looked at · matches "google search"`. Nothing closes
-until you press the button, and rows start ticked so you untick what you're keeping.
+until you tick rows and press the button.
 
-Signals, each worth points:
+**Age is never a verdict.** A tab is only proposed when something *other than its age* says you're
+finished with it. Old on its own just means old — otherwise anyone with a real tab collection gets
+hundreds of rows and a proposal nobody can read.
 
-- **Idle time**, from Chrome's own `lastAccessed` — accurate for tabs that predate the extension. Scores by
-  doublings past your threshold and is capped, so one very old tab can't outrank everything.
-- **Opened but never viewed** — the strongest single signal, and the one that catches a background
-  cmd+click pile.
+Evidence you're done with a tab (at least one of these is required):
+
+- **Opened but never viewed** — the strongest signal, and the one that catches a background cmd+click pile.
 - **Already unloaded by Chrome**, which is Chrome agreeing with you.
 - **Your own phrases** — plain text like `google search` or `flight status`, one per line in Settings,
   matched loosely against title and URL. No regex, no exact spelling.
-- **A pile on one site** — four or more tabs on the same host reads as research.
+
+Corroborating, but never sufficient alone:
+
+- **Idle time**, from Chrome's own `lastAccessed` — accurate for tabs that predate the extension. Capped
+  deliberately below the threshold.
+- **A small pile on one site** — 4 to 12 tabs on the same host reads as research. Above that it isn't a
+  pile, it's a site you live in, and "106 tabs open here" says nothing about any one of them.
+
+**Nothing is pre-ticked, and every row is clickable.** Click a title and it takes you to that tab so you
+can look before deciding. Selection is opt-in — a list you haven't read is not something to pre-approve —
+with a **Select all** shortcut when you trust it.
 
 Never proposed, whatever the score: **pinned, grouped, audible, and active tabs**. That's the whole
 protection model — if a tab must survive, pin it or group it, the same as you'd protect it from any other
