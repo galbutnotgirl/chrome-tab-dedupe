@@ -11,6 +11,7 @@ const autoRow = document.getElementById('autoRow');
 const hint = document.getElementById('hint');
 const undoBtn = document.getElementById('undo');
 const selectAllBtn = document.getElementById('selectAll');
+const clearAllBtn = document.getElementById('clearAll');
 
 // The popup belongs to the browser window it was opened from, so this is the
 // window the "this window" scope means.
@@ -25,6 +26,12 @@ let view = 'duplicates';
  */
 let selected = new Set();
 let clutter = [];
+/**
+ * The tab ids actually rendered. Select-all covers these and only these — the
+ * proposal can be longer than the list, and selecting rows you cannot see is the
+ * trap this whole view exists to avoid.
+ */
+let shownIds = [];
 
 autoBox.checked = Boolean(settings.autoDedupe);
 autoBox.addEventListener('change', () => setSettings({ autoDedupe: autoBox.checked }));
@@ -73,9 +80,19 @@ function syncClutterButton() {
   const n = selected.size;
   sweepBtn.disabled = n === 0;
   sweepBtn.textContent = n ? `Close ${plural(n, 'tab')}` : 'Select tabs to close';
-  selectAllBtn.hidden = clutter.length === 0;
-  selectAllBtn.textContent =
-    n === clutter.length && n > 0 ? 'Clear' : `Select all ${clutter.length}`;
+
+  // Both actions stay visible, so there's always a way back from a big selection.
+  selectAllBtn.hidden = shownIds.length === 0;
+  selectAllBtn.textContent = `Select all ${shownIds.length}`;
+  selectAllBtn.disabled = shownIds.every((id) => selected.has(id));
+  clearAllBtn.hidden = shownIds.length === 0;
+  clearAllBtn.disabled = n === 0;
+}
+
+function syncBoxes() {
+  for (const box of list.querySelectorAll('.pick')) {
+    box.checked = selected.has(Number(box.dataset.tabId));
+  }
 }
 
 function renderClutter(report) {
@@ -84,7 +101,9 @@ function renderClutter(report) {
   const live = new Set(clutter.map((s) => s.id));
   selected = new Set([...selected].filter((id) => live.has(id)));
 
-  const shown = Math.min(clutter.length, MAX_ROWS.clutter);
+  const rows = clutter.slice(0, MAX_ROWS.clutter);
+  shownIds = rows.map((item) => item.id);
+  const shown = rows.length;
   summary.textContent = clutter.length
     ? `${plural(clutter.length, 'tab')} you're probably done with`
     : `Nothing stale in ${plural(report.scanned, 'tab')}.`;
@@ -93,12 +112,13 @@ function renderClutter(report) {
     : '';
 
   list.replaceChildren();
-  for (const item of clutter.slice(0, MAX_ROWS.clutter)) {
+  for (const item of rows) {
     const li = document.createElement('li');
 
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'pick';
+    box.dataset.tabId = String(item.id);
     box.checked = selected.has(item.id);
     box.addEventListener('change', () => {
       if (box.checked) selected.add(item.id);
@@ -158,7 +178,10 @@ async function refresh() {
   if (!undoBtn.hidden) undoBtn.textContent = `Undo (${lastClose.count})`;
 
   autoRow.hidden = view === 'clutter';
-  selectAllBtn.hidden = view !== 'clutter';
+  if (view !== 'clutter') {
+    selectAllBtn.hidden = true;
+    clearAllBtn.hidden = true;
+  }
   if (view === 'duplicates') renderDuplicates(await ask('report'));
   else renderClutter(await ask('clutter'));
 }
@@ -184,9 +207,14 @@ for (const btn of document.querySelectorAll('[data-scope]')) {
 setPressed('[data-scope]', 'scope', allWindows ? 'all' : 'window');
 
 selectAllBtn.addEventListener('click', () => {
-  if (selected.size === clutter.length) selected.clear();
-  else selected = new Set(clutter.map((s) => s.id));
-  for (const box of list.querySelectorAll('.pick')) box.checked = selected.size > 0;
+  selected = new Set(shownIds);
+  syncBoxes();
+  syncClutterButton();
+});
+
+clearAllBtn.addEventListener('click', () => {
+  selected.clear();
+  syncBoxes();
   syncClutterButton();
 });
 

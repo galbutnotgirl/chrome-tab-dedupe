@@ -154,6 +154,19 @@ button.primary:disabled {
   gap: 10px;
 }
 
+.links {
+  display: flex;
+  gap: 10px;
+  flex: none;
+  white-space: nowrap;
+}
+
+button.link:disabled {
+  color: var(--muted);
+  cursor: default;
+  text-decoration: none;
+}
+
 .hint {
   margin: 6px 0 0;
   font-size: 12px;

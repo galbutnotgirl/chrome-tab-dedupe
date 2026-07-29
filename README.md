@@ -119,7 +119,8 @@ Corroborating, but never sufficient alone:
 
 **Nothing is pre-ticked, and every row is clickable.** Click a title and it takes you to that tab so you
 can look before deciding. Selection is opt-in — a list you haven't read is not something to pre-approve —
-with a **Select all** shortcut when you trust it.
+with **Select all** and **Clear** always both available. Select all covers the rows you can actually see,
+never the ones past the cut — selecting what you can't read is the trap this view exists to avoid.
 
 Never proposed, whatever the score: **pinned, grouped, audible, and active tabs**. That's the whole
 protection model — if a tab must survive, pin it or group it, the same as you'd protect it from any other
