@@ -1,28 +1,51 @@
 import { keyForUrl } from './lib/normalize.js';
 import { getSettings } from './lib/settings.js';
+import { stillPending, chooseAnchorId, targetIndexFor, shouldMove } from './lib/decide.js';
 
 const LOG = '[TabDedupe]';
 
 /**
- * Tabs we're still watching. A tab is only eligible for auto-dedupe while it's
- * "pending" — i.e. it was just created and hasn't finished its first navigation.
- * That's the whole safety story: navigating a long-lived tab is never hijacked,
- * so you can't lose your place in a tab you're working in.
+ * Tabs we're still watching. A tab is eligible for auto-dedupe while it's
+ * "pending" — created, but not yet showing a committed web page. That's the
+ * whole safety story: navigating a long-lived tab is never hijacked, so you
+ * can't lose your place in a tab you're working in.
  *
- * tabId -> { windowId, anchorId, createdAt }
+ * tabId -> { windowId, openerTabId, createdAt }
  */
 const pending = new Map();
-const PENDING_TTL_MS = 15000;
+
+/** Memory guard only — eligibility is decided by stillPending(), not by age. */
+const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 
 /** Tabs currently being processed, so overlapping url events don't double-fire. */
 const busy = new Set();
 
 function sweepPending() {
-  const cutoff = Date.now() - PENDING_TTL_MS;
+  const cutoff = Date.now() - PENDING_MAX_AGE_MS;
   for (const [id, entry] of pending) {
     if (entry.createdAt < cutoff) pending.delete(id);
   }
 }
+
+/**
+ * Per-window record of which tab is active and which was active before it.
+ *
+ * Kept in storage.session because the service worker is torn down between
+ * "Cmd+T" and "Enter" all the time, and losing this is what makes a tab land
+ * next to the wrong neighbour.
+ */
+async function readActiveRecord(windowId) {
+  const { activeByWindow = {} } = await chrome.storage.session.get({ activeByWindow: {} });
+  return activeByWindow[windowId] || { current: null, previous: null };
+}
+
+chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+  const { activeByWindow = {} } = await chrome.storage.session.get({ activeByWindow: {} });
+  const record = activeByWindow[windowId] || { current: null, previous: null };
+  if (record.current === tabId) return;
+  activeByWindow[windowId] = { current: tabId, previous: record.current };
+  await chrome.storage.session.set({ activeByWindow });
+});
 
 async function getTabSafe(tabId) {
   if (tabId == null) return null;
@@ -83,51 +106,45 @@ async function forgetDedupe(key) {
 }
 
 /**
- * The tab you were on when the new tab appeared — the anchor we park the
- * existing copy next to.
+ * Resolve the anchor tab — the tab you were on — from the activation record,
+ * falling back to whatever is active if the record is cold (service worker
+ * started after the last activation).
  */
-async function resolveAnchor(tab) {
-  if (tab.openerTabId != null) return tab.openerTabId;
+async function resolveAnchorTab(entry, doomedTabId) {
+  const record = await readActiveRecord(entry.windowId);
+  let { current, previous } = record;
 
-  const [active] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
-  if (active && active.id !== tab.id) return active.id;
+  if (current == null) {
+    const [active] = await chrome.tabs.query({ active: true, windowId: entry.windowId });
+    current = active ? active.id : null;
+  }
 
-  // Foreground-opened tab: Chrome inserts it directly after the tab you were on.
-  const left = await chrome.tabs.query({ windowId: tab.windowId, index: Math.max(tab.index - 1, 0) });
-  return left[0] && left[0].id !== tab.id ? left[0].id : null;
-}
+  const anchorId = chooseAnchorId(
+    { openerTabId: entry.openerTabId, current, previous },
+    doomedTabId,
+  );
+  const anchor = await getTabSafe(anchorId);
+  if (anchor) return anchor;
 
-async function anchorAfterRemoval(entry) {
-  const named = await getTabSafe(entry.anchorId);
-  if (named) return named;
-  // Fallback: closing the duplicate makes Chrome re-activate the tab you came from.
+  // Last resort: closing the duplicate re-activates something; park next to that.
   const [active] = await chrome.tabs.query({ active: true, windowId: entry.windowId });
-  return active || null;
+  return active && active.id !== doomedTabId ? active : null;
 }
 
-async function focusExisting(existingId, entry, settings) {
+async function focusExisting(existingId, anchor, settings) {
   let existing = await getTabSafe(existingId);
   if (!existing) return;
 
-  if (settings.moveNextToCurrent) {
-    const anchor = await anchorAfterRemoval(entry);
-    const grouped = settings.respectGroups && existing.groupId != null && existing.groupId !== -1;
-
-    if (anchor && anchor.id !== existing.id && !existing.pinned && !grouped) {
-      // tabs.move removes then re-inserts. When the existing tab sits left of the
-      // anchor in the same window the anchor shifts down by one, so anchor.index
-      // is already the slot to its right.
-      const sameWindow = existing.windowId === anchor.windowId;
-      const target = sameWindow && existing.index < anchor.index ? anchor.index : anchor.index + 1;
-
-      if (!(sameWindow && existing.index === target)) {
-        try {
-          await chrome.tabs.move(existing.id, { windowId: anchor.windowId, index: target });
-        } catch (e) {
-          console.warn(`${LOG} move failed: ${e.message}`);
-        }
-      }
+  if (shouldMove(existing, anchor, settings)) {
+    const index = targetIndexFor(existing, anchor);
+    try {
+      await chrome.tabs.move(existing.id, { windowId: anchor.windowId, index });
+      console.log(`${LOG} moved tab ${existing.id} to index ${index} beside ${anchor.id}`);
+    } catch (e) {
+      console.warn(`${LOG} move failed: ${e.message}`);
     }
+  } else {
+    console.log(`${LOG} left tab ${existing.id} in place (pinned/grouped/already adjacent)`);
   }
 
   try {
@@ -188,8 +205,12 @@ async function dedupe(tabId, url) {
   console.log(`${LOG} duplicate ${key} — closing new tab ${tabId}, focusing ${existing.id}`);
   await rememberDedupe(key);
   pending.delete(tabId);
+
+  // Resolve the anchor BEFORE removing the tab: closing the active tab makes
+  // Chrome re-activate a neighbour, which would overwrite the record we need.
+  const anchor = await resolveAnchorTab(entry, tabId);
   await chrome.tabs.remove(tabId);
-  await focusExisting(existing.id, entry, settings);
+  await focusExisting(existing.id, anchor, settings);
 }
 
 async function maybeDedupe(tabId, url) {
@@ -206,26 +227,31 @@ async function maybeDedupe(tabId, url) {
 
 chrome.tabs.onCreated.addListener((tab) => {
   if (tab.id == null) return;
-  // Registered synchronously so a fast first navigation still finds the entry;
-  // anchorId lands a tick later.
-  const entry = { windowId: tab.windowId, anchorId: null, createdAt: Date.now() };
-  pending.set(tab.id, entry);
-  sweepPending();
-
-  resolveAnchor(tab).then((id) => {
-    entry.anchorId = id;
+  pending.set(tab.id, {
+    windowId: tab.windowId,
+    openerTabId: tab.openerTabId ?? null,
+    createdAt: Date.now(),
   });
+  sweepPending();
 
   const url = tab.pendingUrl || tab.url;
   if (url) maybeDedupe(tab.id, url);
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (!pending.has(tabId)) return;
-  // Redirect chains fire several url events; check each one, then stop watching
-  // once the page has committed.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const entry = pending.get(tabId);
+  if (!entry) return;
+
+  // Redirect chains fire several url events; check each one.
   if (changeInfo.url) maybeDedupe(tabId, changeInfo.url);
-  if (changeInfo.status === 'complete') pending.delete(tabId);
+
+  // Stop watching only once a real web page has committed. The new-tab page
+  // finishing its OWN load is not the navigation we're waiting for — dropping the
+  // entry there is what broke "Cmd+T, type, Enter", since the omnibox navigation
+  // arrives long after chrome://newtab reports complete.
+  if (changeInfo.status === 'complete' && !stillPending(entry, tab.url || tab.pendingUrl)) {
+    pending.delete(tabId);
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

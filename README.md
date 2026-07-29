@@ -93,13 +93,29 @@ One wrinkle worth knowing: if the tab you're on is *inside* a group and the exis
 | Toolbar sweep covers all windows | off — current window only |
 | Never dedupe these hosts | `localhost`, `127.0.0.1` |
 
+## Troubleshooting
+
+Open the service worker console: `chrome://extensions` → the Tab Dedupe card → **service worker**. Every decision logs with a `[TabDedupe]` prefix. Then open a duplicate and read what it says.
+
+| What you see | What it means |
+|---|---|
+| `duplicate <key> — closing new tab N, focusing M` | Working. Followed by either `moved tab M to index…` or `left tab M in place…` |
+| `left tab M in place (pinned/grouped/already adjacent)` | Dedupe worked, move declined on purpose — usually the existing tab is in a tab group |
+| `repeat open of <key> — allowing a second copy` | You opened it twice inside 8 seconds, so the second was honored |
+| `bypass armed — leaving new tab N open` | `Alt+Shift+N` was still armed |
+| Nothing at all | The extension never saw a duplicate. Check both tabs resolve to the same key — the two URLs may differ in a way no rule collapses |
+
+**After editing any file, click Reload on the extension card.** Chrome keeps running the old service worker until you do, which makes a fixed bug look unfixed.
+
 ## Development
 
 ```bash
-node --test test/normalize.test.mjs
+npm test
 ```
 
-16 tests over the URL keying rules — that's where the risk lives, and it's pure (no `chrome.*`), so it runs straight in node. After editing any file, hit **Reload** on the card in `chrome://extensions`. Service worker logs: click **service worker** on that card; everything is prefixed `[TabDedupe]`.
+28 tests, all pure (no `chrome.*`), so they run straight in node: URL keying in `lib/normalize.js`, and the
+tab-lifecycle decisions in `lib/decide.js` — which tab counts as still-new, which tab is the anchor, and
+where the existing tab lands. After editing any file, hit **Reload** on the card in `chrome://extensions`. Service worker logs: click **service worker** on that card; everything is prefixed `[TabDedupe]`.
 
 Layout:
 
@@ -107,6 +123,7 @@ Layout:
 manifest.json
 background.js          tab events, dedupe decision, move + focus, sweep, menus
 lib/normalize.js       URL -> dedupe key (pure, tested)
+lib/decide.js          eligibility + anchor + target index (pure, tested)
 lib/settings.js        defaults + chrome.storage.sync wrapper
 popup.html/.css/.js    toolbar popup: what's duplicated + one-click close
 options.html/.css/.js  settings UI, rule checkboxes generated from RULES
