@@ -72,7 +72,7 @@ Chrome exposes no way for an extension to see modifier keys held in the address 
 
 ## What it deliberately won't do
 
-- **Only just-opened tabs get redirected.** A tab is eligible for ~15s after creation, until its first navigation commits. Navigating a tab you're already working in is never hijacked, so you can't lose your place.
+- **Only just-opened tabs get redirected.** A tab stays eligible until it commits a real web page — so a blank tab qualifies however long it sits there, and a tab showing a page never does. Navigating a tab you're already working in is never hijacked, so you can't lose your place.
 - **A tab alone in its own window is left alone.** You opened that window on purpose; closing the tab would close the window.
 - **Pinned tabs are never closed or moved.**
 - **Tabs in a tab group don't get moved** (moving one out of its range drops it from the group). It still gets focused — just in place. Turn this off in Options if you'd rather it move.
