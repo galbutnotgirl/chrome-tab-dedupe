@@ -64,13 +64,29 @@ Each rule has its own checkbox in Options. Adding one is a single entry in `RULE
 
 ## Close related tabs
 
-Right-click any tab. Three items:
+Right-click any tab. Four items:
 
-| Item | What it closes |
+| Item | What it does |
 |---|---|
+| **Review related tabs…** | Opens the popup's **Related** view: every category, named and listed, before anything closes |
 | **Close related tabs** | The whole excursion that tab belongs to — the tab it was opened from, and everything opened from those |
 | **Close other tabs from this site** | Every other tab on the same host. The clicked tab stays |
 | **Close duplicate tabs** | Same sweep as the toolbar button |
+
+**Review first if you're not sure.** The Related view answers "what else goes with this?" by showing
+three categories for the tab you clicked, each with its count, the actual tab titles, and its own close
+button:
+
+| Category | What's in it |
+|---|---|
+| **This trail** | Tabs opened from one another, starting at this one. This is what *Close related tabs* removes |
+| **Other tabs on ‹site›** | Same host, however you got there. The clicked tab stays |
+| **Copies of this page** | The same document open more than once, using the same identity rules as auto-dedupe |
+
+Every title is clickable — it takes you to that tab. Tabs spared by the protection rules are counted in
+the note (`1 left alone (pinned, grouped, or playing)`) so the number you see is the number that goes.
+The window scope switch is hidden here on purpose: a trail follows openers across windows, so scoping it
+to one window would only mislead.
 
 The signal is **lineage, not similarity**. Chrome tells the extension which tab opened which, recorded at
 creation time so it survives the opener closing. Research reads as a tree: you open a restaurant from a

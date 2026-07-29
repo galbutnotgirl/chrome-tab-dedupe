@@ -512,25 +512,93 @@ export async function closeSameSiteTabs(seedTabId) {
   return closeWithUndo(ids, `close others on ${host}`);
 }
 
-/** Preview of the same two actions, for the popup to show before committing. */
+/**
+ * What each right-click action would actually close, before it closes anything.
+ *
+ * Three categories from one seed tab, so "close related" stops being a leap of
+ * faith: the trail it belongs to, everything else on that site, and copies of
+ * the same page.
+ */
 export async function relatedReport(seedTabId) {
   const settings = await getSettings();
   const [tabs, { parentOf, meta }] = await Promise.all([normalTabs(), intelMaps()]);
   const byId = new Map(tabs.map((t) => [t.id, t]));
+
+  const seed = byId.get(seedTabId);
+  if (!seed) return { seed: null, groups: [] };
+
   const related = relatedCluster(tabs, parentOf, seedTabId, {
     ...clusterOptions(settings),
     meta,
   });
   const site = sameHostCluster(tabs, seedTabId, clusterOptions(settings));
+
+  // Copies of this exact page, using the same identity rules as auto-dedupe.
+  const seedKey = keyForUrl(seed.url || seed.pendingUrl, settings);
+  const dupeIds = seedKey
+    ? tabs
+        .filter((t) => t.id !== seedTabId && keyForUrl(t.url || t.pendingUrl, settings) === seedKey)
+        .filter((t) => !t.pinned)
+        .map((t) => t.id)
+    : [];
+
   const describe = (ids) =>
     ids
       .map((id) => byId.get(id))
       .filter(Boolean)
-      .map((t) => ({ id: t.id, title: t.title || t.url, host: hostLabel(t.url) }));
+      .map((t) => ({
+        id: t.id,
+        title: t.title || t.url,
+        host: hostLabel(t.url),
+        isSeed: t.id === seedTabId,
+      }));
+
   return {
-    related: { ids: related.ids, tabs: describe(related.ids), skipped: related.skipped.length },
-    site: { host: site.host, ids: site.ids, tabs: describe(site.ids), skipped: site.skipped.length },
+    seed: { id: seed.id, title: seed.title || seed.url, host: hostLabel(seed.url) },
+    groups: [
+      {
+        key: 'related',
+        label: 'This trail',
+        note: 'Tabs opened from one another, starting at this one',
+        ids: related.ids,
+        tabs: describe(related.ids),
+        skipped: related.skipped.length,
+      },
+      {
+        key: 'site',
+        label: site.host ? `Other tabs on ${site.host}` : 'Other tabs on this site',
+        note: 'Same site, however you got there. This tab stays',
+        ids: site.ids,
+        tabs: describe(site.ids),
+        skipped: site.skipped.length,
+      },
+      {
+        key: 'duplicates',
+        label: 'Copies of this page',
+        note: 'The same document open more than once',
+        ids: dupeIds,
+        tabs: describe(dupeIds),
+        skipped: 0,
+      },
+    ],
   };
+}
+
+/**
+ * Right-click "Review related tabs" stores its seed here and opens the popup.
+ * Kept short-lived so a stale seed never hijacks a later popup click.
+ */
+const SEED_TTL_MS = 60_000;
+
+async function stashSeed(tabId) {
+  await chrome.storage.session.set({ pendingSeed: { tabId, at: Date.now() } });
+}
+
+async function takeSeed() {
+  const { pendingSeed } = await chrome.storage.session.get('pendingSeed');
+  await chrome.storage.session.remove('pendingSeed');
+  if (!pendingSeed || Date.now() - pendingSeed.at > SEED_TTL_MS) return null;
+  return pendingSeed.tabId;
 }
 
 // --- clutter review ----------------------------------------------------------
@@ -628,6 +696,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     relatedReport(msg.tabId).then(respond);
     return true;
   }
+  if (msg.type === 'takeSeed') {
+    takeSeed().then((tabId) => respond({ tabId }));
+    return true;
+  }
   return false;
 });
 
@@ -639,6 +711,7 @@ const MENU_ITEMS = [
   { id: 'sweep-window', title: 'Close duplicate tabs in this window', contexts: ['action'] },
   { id: 'sweep-all', title: 'Close duplicate tabs in all windows', contexts: ['action'] },
   { id: 'undo-last-close', title: 'Undo close', contexts: ['action'], enabled: false },
+  { id: 'review-related', title: 'Review related tabs…', contexts: ['tab'] },
   { id: 'close-related', title: 'Close related tabs', contexts: ['tab'] },
   { id: 'close-same-site', title: 'Close other tabs from this site', contexts: ['tab'] },
   { id: 'close-duplicates-tab', title: 'Close duplicate tabs', contexts: ['tab'] },
@@ -658,6 +731,21 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Menus live only as long as the browser session, so rebuild them on startup too.
 chrome.runtime.onStartup.addListener(createMenus);
 
+async function reviewRelated(seedTabId) {
+  await stashSeed(seedTabId);
+  try {
+    await chrome.action.openPopup();
+  } catch (e) {
+    // openPopup needs a focused window and isn't guaranteed; the seed is stored
+    // either way, so clicking the toolbar icon within the minute still lands on
+    // the right review.
+    console.warn(`${LOG} openPopup unavailable (${e.message}) — click the icon to review`);
+    chrome.action.setBadgeBackgroundColor({ color: '#8A37F4' });
+    chrome.action.setBadgeText({ text: '?' });
+    setTimeout(() => chrome.action.setBadgeText({ text: '' }), 6000);
+  }
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const windowId = tab ? tab.windowId : undefined;
   switch (info.menuItemId) {
@@ -667,6 +755,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       break;
     case 'sweep-all':
       flashBadge(await closeDuplicates({ allWindows: true, windowId }));
+      break;
+    case 'review-related':
+      if (tab) await reviewRelated(tab.id);
       break;
     case 'close-related':
       if (tab) await closeRelatedTabs(tab.id);

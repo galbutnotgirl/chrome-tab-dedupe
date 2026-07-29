@@ -12,6 +12,8 @@ const hint = document.getElementById('hint');
 const undoBtn = document.getElementById('undo');
 const selectAllBtn = document.getElementById('selectAll');
 const clearAllBtn = document.getElementById('clearAll');
+const relatedBox = document.getElementById('related');
+const scopeRow = document.getElementById('scopeRow');
 
 // The popup belongs to the browser window it was opened from, so this is the
 // window the "this window" scope means.
@@ -108,7 +110,7 @@ function renderClutter(report) {
     ? `${plural(clutter.length, 'tab')} you're probably done with`
     : `Nothing stale in ${plural(report.scanned, 'tab')}.`;
   hint.textContent = clutter.length
-    ? `Click a title to go look at it. Showing ${shown} of ${clutter.length}.`
+    ? `Showing ${shown} of ${clutter.length} · click a title to look first`
     : '';
 
   list.replaceChildren();
@@ -144,6 +146,90 @@ function renderClutter(report) {
   syncClutterButton();
 }
 
+// --- related view -----------------------------------------------------------
+
+const MAX_GROUP_ROWS = 4;
+
+async function jumpTo(tabId) {
+  await chrome.runtime.sendMessage({ type: 'focusTab', tabId });
+  window.close();
+}
+
+function renderRelated(report) {
+  relatedBox.replaceChildren();
+
+  if (!report.seed) {
+    summary.textContent = 'No tab to review.';
+    hint.textContent = '';
+    return;
+  }
+
+  summary.textContent = report.seed.title;
+  hint.textContent = 'Each group closes on its own. Undo puts it back.';
+
+  for (const group of report.groups) {
+    const block = document.createElement('div');
+    block.className = 'group';
+
+    const head = document.createElement('div');
+    head.className = 'groupHead';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = group.label;
+    const num = document.createElement('span');
+    num.className = 'num';
+    num.textContent = group.ids.length ? plural(group.ids.length, 'tab') : 'none';
+    head.append(name, num);
+
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = group.skipped
+      ? `${group.note} · ${group.skipped} left alone (pinned, grouped, or playing)`
+      : group.note;
+
+    block.append(head, note);
+
+    if (group.tabs.length) {
+      const ul = document.createElement('ul');
+      for (const item of group.tabs.slice(0, MAX_GROUP_ROWS)) {
+        const li = document.createElement('li');
+        if (item.isSeed) li.className = 'self';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.textContent = item.isSeed ? '▸' : '·';
+        const jump = document.createElement('button');
+        jump.textContent = item.isSeed ? `${item.title} (this tab)` : item.title;
+        jump.title = 'Go to this tab';
+        jump.addEventListener('click', () => jumpTo(item.id));
+        li.append(dot, jump);
+        ul.append(li);
+      }
+      const hidden = group.tabs.length - MAX_GROUP_ROWS;
+      if (hidden > 0) {
+        const li = document.createElement('li');
+        li.textContent = `   +${hidden} more`;
+        ul.append(li);
+      }
+      block.append(ul);
+    }
+
+    const act = document.createElement('button');
+    act.className = 'act';
+    act.disabled = group.ids.length === 0;
+    act.textContent = group.ids.length ? `Close ${plural(group.ids.length, 'tab')}` : 'Nothing to close';
+    act.addEventListener('click', async () => {
+      act.disabled = true;
+      const res = await ask('closeIds', { ids: group.ids, what: `related: ${group.key}` });
+      const n = res && res.count ? res.count : 0;
+      act.textContent = `Closed ${n}`;
+      await refresh();
+    });
+    block.append(act);
+
+    relatedBox.append(block);
+  }
+}
+
 // --- shared -----------------------------------------------------------------
 
 function titleCell(text, sub) {
@@ -168,7 +254,7 @@ function appendOverflow(total, max) {
   if (hidden <= 0) return;
   const li = document.createElement('li');
   li.className = 'more';
-  li.textContent = `+${hidden} more — close these, then reopen to see the rest`;
+  li.textContent = `+${hidden} more — handle these, then reopen`;
   list.append(li);
 }
 
@@ -177,13 +263,32 @@ async function refresh() {
   undoBtn.hidden = !(lastClose && lastClose.count);
   if (!undoBtn.hidden) undoBtn.textContent = `Undo (${lastClose.count})`;
 
-  autoRow.hidden = view === 'clutter';
+  autoRow.hidden = view !== 'duplicates';
   if (view !== 'clutter') {
     selectAllBtn.hidden = true;
     clearAllBtn.hidden = true;
   }
+
+  // A trail follows openers across windows, so a window scope would only mislead.
+  scopeRow.hidden = view === 'related';
+  list.hidden = view === 'related';
+  relatedBox.hidden = view !== 'related';
+  sweepBtn.hidden = view === 'related';
+
   if (view === 'duplicates') renderDuplicates(await ask('report'));
-  else renderClutter(await ask('clutter'));
+  else if (view === 'clutter') renderClutter(await ask('clutter'));
+  else renderRelated(await ask('relatedReport', { tabId: await seedTabId() }));
+}
+
+/**
+ * Which tab the Related view is about: the one you right-clicked if you came
+ * from "Review related tabs…", otherwise the tab you're looking at.
+ */
+async function seedTabId() {
+  const res = await chrome.runtime.sendMessage({ type: 'takeSeed' });
+  if (res && res.tabId != null) return res.tabId;
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return active ? active.id : null;
 }
 
 for (const btn of document.querySelectorAll('[data-view]')) {

@@ -8,15 +8,17 @@
     <div class="views">
       <button data-view="duplicates" class="seg">Duplicates</button>
       <button data-view="clutter" class="seg">Clutter</button>
+      <button data-view="related" class="seg">Related</button>
     </div>
 
-    <div class="scope">
+    <div class="scope" id="scopeRow">
       <button data-scope="window" class="seg">This window</button>
       <button data-scope="all" class="seg">All windows</button>
     </div>
 
     <p id="summary" class="summary">Checking…</p>
     <ul id="list" class="list"></ul>
+    <div id="related" class="groups" hidden></div>
 
     <button id="sweep" class="primary" disabled>Close duplicates</button>
 
