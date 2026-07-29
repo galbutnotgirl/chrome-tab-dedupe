@@ -93,7 +93,7 @@ page.
 been finished for a few seconds — the grace period exists so a hand-off page never gets closed while the
 app it's opening is still starting. Every auto-close goes through the same undo trail as everything else.
 
-## Same document, different URL## Same document, different URL
+## Same document, different URL
 
 This is the interesting part. A Slides link carrying `#slide=id.g12` is the same deck as the copy you already have open on slide 1 — a plain string compare misses it. So URLs get reduced to the thing a human would call the document, with view state thrown away:
 
