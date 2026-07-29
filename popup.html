@@ -5,6 +5,11 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
+    <div class="views">
+      <button data-view="duplicates" class="seg">Duplicates</button>
+      <button data-view="clutter" class="seg">Clutter</button>
+    </div>
+
     <div class="scope">
       <button data-scope="window" class="seg">This window</button>
       <button data-scope="all" class="seg">All windows</button>
@@ -16,14 +21,16 @@
     <button id="sweep" class="primary" disabled>Close duplicates</button>
 
     <div class="row">
-      <label class="toggle">
+      <label class="toggle" id="autoRow">
         <input type="checkbox" id="autoDedupe" />
         Auto-close new duplicate tabs
       </label>
+      <p id="hint" class="hint"></p>
     </div>
 
     <div class="footer">
       <button id="arm" class="link">Let the next tab through</button>
+      <button id="undo" class="link" hidden>Undo</button>
       <button id="options" class="link">Settings</button>
     </div>
 

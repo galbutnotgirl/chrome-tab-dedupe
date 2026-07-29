@@ -1,10 +1,12 @@
 # Tab Dedupe
 
-A local Chrome extension (MV3). Two jobs:
+A local Chrome extension (MV3). Five jobs:
 
 1. **No second copy.** Open something that's already in a tab and the new tab closes — the tab you already had gets focused instead.
 2. **It comes to you.** That existing tab moves into the slot immediately right of the tab you were on, so it's never "way over to the left" or buried in another window.
 3. **Clean up on demand.** Click the toolbar icon for a popup that lists what's duplicated and how many copies, then close them in one click.
+4. **Close a whole excursion.** Right-click any tab → **Close related tabs** and the research trail it belongs to goes with it.
+5. **Review the clutter.** The popup's **Clutter** tab ranks tabs you're probably done with, says why, and lets you tick what closes.
 
 ```
 ┌─────────────────────────────────┐
@@ -23,7 +25,7 @@ A local Chrome extension (MV3). Two jobs:
 
 Three ways to sweep, same engine: the popup button, right-click the icon → **Close duplicate tabs in this window / all windows**, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> for an instant no-popup sweep (badge flashes the count).
 
-No store listing, no third party, no analytics. Permissions are `tabs`, `tabGroups`, `storage`, `contextMenus` — nothing leaves the browser.
+No store listing, no third party, no analytics. Permissions are `tabs`, `tabGroups`, `storage`, `contextMenus`, `sessions` — nothing leaves the browser.
 
 ## Install
 
@@ -60,6 +62,57 @@ Everything else uses generic matching: `http`/`https` collapse, `www.` and trail
 
 Each rule has its own checkbox in Options. Adding one is a single entry in `RULES` in [lib/normalize.js](lib/normalize.js) — the options page builds its checkbox list from that array.
 
+## Close related tabs
+
+Right-click any tab. Three items:
+
+| Item | What it closes |
+|---|---|
+| **Close related tabs** | The whole excursion that tab belongs to — the tab it was opened from, and everything opened from those |
+| **Close other tabs from this site** | Every other tab on the same host. The clicked tab stays |
+| **Close duplicate tabs** | Same sweep as the toolbar button |
+
+The signal is **lineage, not similarity**. Chrome tells the extension which tab opened which, recorded at
+creation time so it survives the opener closing. Research reads as a tree: you open a restaurant from a
+search, then its menu, a review, directions from the review. Right-click anywhere in that tree and the
+whole tree goes. Keyword guessing would have to decide whether `maps.example.com` is about tacos; lineage
+already knows you got there from the review.
+
+The one real hazard is climbing **up** too far. If you opened that search from your inbox, a naive walk to
+the top would take your inbox and everything else you opened from it all day. Three guards stop that:
+
+- **Time gap.** A tab opened more than 15 minutes after its parent starts a new excursion — the climb stops
+  below it. That's the guard that keeps a tab you leave open all day from becoming the root. Tunable.
+- **Hub tabs.** A tab with more than 6 direct children is a launcher, not a step in a trail.
+- **Pinned and grouped tabs** are never climbed through, and never closed.
+
+When creation times are unknown — tabs older than the extension, or a fresh browser session — it refuses to
+climb at all and closes only the clicked tab and its descendants. A smaller cluster beats one that eats
+your morning.
+
+**Everything is undoable.** Every bulk close records how many tabs went, and Undo reopens them via Chrome's
+own session history — the popup's Undo link, the toolbar right-click menu, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>.
+
+## Clutter review
+
+The popup's **Clutter** tab ranks open tabs by how likely you're done with them, and shows the reasoning
+for each one — `untouched for 2d · opened but never looked at · matches "google search"`. Nothing closes
+until you press the button, and rows start ticked so you untick what you're keeping.
+
+Signals, each worth points:
+
+- **Idle time**, from Chrome's own `lastAccessed` — accurate for tabs that predate the extension. Scores by
+  doublings past your threshold and is capped, so one very old tab can't outrank everything.
+- **Opened but never viewed** — the strongest single signal, and the one that catches a background
+  cmd+click pile.
+- **Already unloaded by Chrome**, which is Chrome agreeing with you.
+- **Your own fuzzy rules** — plain phrases like `google search` or `flight status`, one per line in Options,
+  matched loosely against title and URL. No regex, no exact spelling.
+- **A pile on one site** — four or more tabs on the same host reads as research.
+
+Never proposed, whatever the score: pinned, audible, active, grouped tabs, and anything matching your
+**never propose** list. Eagerness is a three-way setting (cautious / balanced / eager).
+
 ## When you really do want a second copy
 
 Chrome exposes no way for an extension to see modifier keys held in the address bar — the API reports that a tab was created, never how. So "hold Shift while pressing Enter" is undetectable, by this extension or any other. Two mechanisms cover the same intent:
@@ -92,6 +145,10 @@ One wrinkle worth knowing: if the tab you're on is *inside* a group and the exis
 | Ignore every query string | off — too blunt for search and app URLs |
 | Toolbar sweep covers all windows | off — current window only |
 | Never dedupe these hosts | `localhost`, `127.0.0.1` |
+| Clutter eagerness | balanced (score 3) |
+| Count a tab idle after | 2 hours |
+| Tabs I usually don't need / never propose | empty — your own phrases |
+| New excursion after | 15 minutes past the parent |
 
 ## Troubleshooting
 
@@ -104,6 +161,8 @@ Open the service worker console: `chrome://extensions` → the Tab Dedupe card �
 | `repeat open of <key> — allowing a second copy` | You opened it twice inside 8 seconds, so the second was honored |
 | `bypass armed — leaving new tab N open` | `Alt+Shift+N` was still armed |
 | Nothing at all | The extension never saw a duplicate. Check both tabs resolve to the same key — the two URLs may differ in a way no rule collapses |
+| `related: root N, K in cluster, S spared` | Which tab the excursion was rooted at. A cluster of 1 means it refused to climb — usually no creation times yet for tabs opened before the last reload |
+| `undo: restored K/N` | Chrome had fewer restorable entries than tabs closed |
 
 **After editing any file, click Reload on the extension card.** Chrome keeps running the old service worker until you do, which makes a fixed bug look unfixed.
 
@@ -113,7 +172,7 @@ Open the service worker console: `chrome://extensions` → the Tab Dedupe card �
 npm test
 ```
 
-28 tests, all pure (no `chrome.*`), so they run straight in node: URL keying in `lib/normalize.js`, and the
+61 tests, all pure (no `chrome.*`), so they run straight in node: URL keying in `lib/normalize.js`, and the
 tab-lifecycle decisions in `lib/decide.js` — which tab counts as still-new, which tab is the anchor, and
 where the existing tab lands. After editing any file, hit **Reload** on the card in `chrome://extensions`. Service worker logs: click **service worker** on that card; everything is prefixed `[TabDedupe]`.
 
@@ -124,6 +183,9 @@ manifest.json
 background.js          tab events, dedupe decision, move + focus, sweep, menus
 lib/normalize.js       URL -> dedupe key (pure, tested)
 lib/decide.js          eligibility + anchor + target index (pure, tested)
+lib/cluster.js         related-tab lineage, hub + time-gap guards (pure, tested)
+lib/staleness.js       clutter scoring with human-readable reasons (pure, tested)
+lib/fuzzy.js           loose phrase matching for user rules (pure, tested)
 lib/settings.js        defaults + chrome.storage.sync wrapper
 popup.html/.css/.js    toolbar popup: what's duplicated + one-click close
 options.html/.css/.js  settings UI, rule checkboxes generated from RULES

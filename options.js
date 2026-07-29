@@ -1,4 +1,5 @@
 import { RULES } from './lib/normalize.js';
+import { parsePatterns } from './lib/fuzzy.js';
 import { DEFAULTS, getSettings, setSettings } from './lib/settings.js';
 
 const savedFlash = document.getElementById('saved');
@@ -29,10 +30,34 @@ function syncRulesEnabled(smartRules) {
 const settings = await getSettings();
 
 for (const el of document.querySelectorAll('[data-setting]')) {
-  el.checked = Boolean(settings[el.dataset.setting]);
+  const key = el.dataset.setting;
+  const isNumber = el.dataset.type === 'number';
+
+  if (isNumber) el.value = String(settings[key]);
+  else el.checked = Boolean(settings[key]);
+
   el.addEventListener('change', async () => {
-    await setSettings({ [el.dataset.setting]: el.checked });
-    if (el.dataset.setting === 'smartRules') syncRulesEnabled(el.checked);
+    let value;
+    if (isNumber) {
+      const parsed = Number(el.value);
+      // Never let a blank or nonsense entry become the stored setting.
+      value = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULTS[key];
+      el.value = String(value);
+    } else {
+      value = el.checked;
+    }
+    await setSettings({ [key]: value });
+    if (key === 'smartRules') syncRulesEnabled(el.checked);
+    flashSaved();
+  });
+}
+
+// Fuzzy pattern lists: stored as arrays, edited as one-per-line text.
+for (const id of ['disposablePatterns', 'protectPatterns']) {
+  const box = document.getElementById(id);
+  box.value = (settings[id] || []).join('\n');
+  box.addEventListener('change', async () => {
+    await setSettings({ [id]: parsePatterns(box.value) });
     flashSaved();
   });
 }

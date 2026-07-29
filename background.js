@@ -1,8 +1,55 @@
 import { keyForUrl } from './lib/normalize.js';
 import { getSettings } from './lib/settings.js';
 import { stillPending, chooseAnchorId, targetIndexFor, shouldMove } from './lib/decide.js';
+import { relatedCluster, sameHostCluster } from './lib/cluster.js';
+import { suggestClosures } from './lib/staleness.js';
 
 const LOG = '[TabDedupe]';
+
+/**
+ * Per-tab intel: when it was opened, which tab opened it, how many times you've
+ * actually looked at it. Feeds "close related tabs" (lineage) and the clutter
+ * review (never-viewed).
+ *
+ * Idle time is NOT tracked here — Chrome's own tab.lastAccessed is authoritative
+ * and covers tabs that predate the extension.
+ *
+ * Lives in storage.session: scoped to the browser session, wiped on quit, never
+ * written to disk. Tab ids aren't stable across restarts anyway.
+ */
+let intelChain = Promise.resolve();
+
+async function readIntel() {
+  const { tabIntel = {} } = await chrome.storage.session.get({ tabIntel: {} });
+  return tabIntel;
+}
+
+/** Serialized read-modify-write, so concurrent tab events can't lose updates. */
+function mutateIntel(fn) {
+  intelChain = intelChain
+    .then(async () => {
+      const tabIntel = await readIntel();
+      fn(tabIntel);
+      await chrome.storage.session.set({ tabIntel });
+    })
+    .catch((e) => console.warn(`${LOG} intel write failed: ${e.message}`));
+  return intelChain;
+}
+
+/** Maps for the pure cluster/staleness modules. */
+async function intelMaps() {
+  const tabIntel = await readIntel();
+  const parentOf = new Map();
+  const meta = new Map();
+  const byId = new Map();
+  for (const [id, rec] of Object.entries(tabIntel)) {
+    const tabId = Number(id);
+    if (rec.parent != null) parentOf.set(tabId, rec.parent);
+    meta.set(tabId, { createdAt: rec.createdAt || null });
+    byId.set(tabId, rec);
+  }
+  return { parentOf, meta, byId };
+}
 
 /**
  * Tabs we're still watching. A tab is eligible for auto-dedupe while it's
@@ -40,6 +87,14 @@ async function readActiveRecord(windowId) {
 }
 
 chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+  // "You actually looked at this tab" — the signal the clutter review leans on.
+  mutateIntel((intel) => {
+    const rec = intel[tabId] || { createdAt: null, parent: null, activations: 0 };
+    rec.activations = (rec.activations || 0) + 1;
+    rec.lastActivatedAt = Date.now();
+    intel[tabId] = rec;
+  });
+
   const { activeByWindow = {} } = await chrome.storage.session.get({ activeByWindow: {} });
   const record = activeByWindow[windowId] || { current: null, previous: null };
   if (record.current === tabId) return;
@@ -234,6 +289,16 @@ chrome.tabs.onCreated.addListener((tab) => {
   });
   sweepPending();
 
+  // Lineage is captured here and only here: openerTabId is reliable at creation
+  // and gone once the opener closes.
+  mutateIntel((intel) => {
+    intel[tab.id] = {
+      createdAt: Date.now(),
+      parent: tab.openerTabId ?? null,
+      activations: 0,
+    };
+  });
+
   const url = tab.pendingUrl || tab.url;
   if (url) maybeDedupe(tab.id, url);
 });
@@ -257,6 +322,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   pending.delete(tabId);
   busy.delete(tabId);
+  // Children keep pointing at this id as their parent; the climb simply stops
+  // when the opener is no longer an open tab.
+  mutateIntel((intel) => {
+    delete intel[tabId];
+  });
 });
 
 /** Keeper wins on: pinned, then active, then grouped, then playing audio, then leftmost. */
@@ -347,6 +417,149 @@ function flashBadge(count) {
   setTimeout(() => chrome.action.setBadgeText({ text: '' }), 3000);
 }
 
+// --- closing with an undo trail ---------------------------------------------
+
+/**
+ * Every bulk close in this extension goes through here, so there is always a way
+ * back. chrome.sessions.restore reopens the most recently closed tab; closing N
+ * tabs means N restores.
+ */
+async function closeWithUndo(ids, what) {
+  const unique = [...new Set(ids)].filter((id) => id != null);
+  if (!unique.length) {
+    console.log(`${LOG} ${what}: nothing to close`);
+    flashBadge(0);
+    return 0;
+  }
+  await chrome.tabs.remove(unique);
+  await chrome.storage.session.set({ lastClose: { count: unique.length, at: Date.now(), what } });
+  await refreshUndoMenu(unique.length);
+  console.log(`${LOG} ${what}: closed ${unique.length} tab(s)`);
+  flashBadge(unique.length);
+  return unique.length;
+}
+
+async function undoLastClose() {
+  const { lastClose } = await chrome.storage.session.get('lastClose');
+  const count = lastClose && lastClose.count ? lastClose.count : 0;
+  if (!count) {
+    console.log(`${LOG} undo: nothing to restore`);
+    return 0;
+  }
+
+  let restored = 0;
+  for (let i = 0; i < count; i += 1) {
+    try {
+      await chrome.sessions.restore();
+      restored += 1;
+    } catch (e) {
+      // Ran out of restorable entries — stop rather than loop on the error.
+      console.warn(`${LOG} undo stopped after ${restored}: ${e.message}`);
+      break;
+    }
+  }
+  await chrome.storage.session.remove('lastClose');
+  await refreshUndoMenu(0);
+  console.log(`${LOG} undo: restored ${restored}/${count} tab(s)`);
+  return restored;
+}
+
+async function refreshUndoMenu(count) {
+  try {
+    await chrome.contextMenus.update('undo-last-close', {
+      title: count ? `Undo close (${count} tab${count === 1 ? '' : 's'})` : 'Undo close',
+      enabled: count > 0,
+    });
+  } catch {
+    // Menu not created yet (first run) — nothing to refresh.
+  }
+}
+
+// --- related tabs ------------------------------------------------------------
+
+function clusterOptions(settings) {
+  return {
+    protectPinned: true,
+    protectGrouped: settings.respectGroups !== false,
+    protectAudible: true,
+    maxGapMs: Math.max(1, Number(settings.clusterGapMinutes) || 15) * 60 * 1000,
+  };
+}
+
+/** Tabs eligible for clustering: real browser windows only. */
+function normalTabs() {
+  return chrome.tabs.query({ windowType: 'normal' });
+}
+
+export async function closeRelatedTabs(seedTabId) {
+  const settings = await getSettings();
+  const [tabs, { parentOf, meta }] = await Promise.all([normalTabs(), intelMaps()]);
+  const { ids, rootId, skipped } = relatedCluster(tabs, parentOf, seedTabId, {
+    ...clusterOptions(settings),
+    meta,
+  });
+  console.log(
+    `${LOG} related: root ${rootId}, ${ids.length} in cluster, ${skipped.length} spared`,
+  );
+  return closeWithUndo(ids, 'close related');
+}
+
+export async function closeSameSiteTabs(seedTabId) {
+  const settings = await getSettings();
+  const tabs = await normalTabs();
+  const { ids, host, skipped } = sameHostCluster(tabs, seedTabId, clusterOptions(settings));
+  console.log(`${LOG} same site (${host}): ${ids.length} to close, ${skipped.length} spared`);
+  return closeWithUndo(ids, `close others on ${host}`);
+}
+
+/** Preview of the same two actions, for the popup to show before committing. */
+export async function relatedReport(seedTabId) {
+  const settings = await getSettings();
+  const [tabs, { parentOf, meta }] = await Promise.all([normalTabs(), intelMaps()]);
+  const byId = new Map(tabs.map((t) => [t.id, t]));
+  const related = relatedCluster(tabs, parentOf, seedTabId, {
+    ...clusterOptions(settings),
+    meta,
+  });
+  const site = sameHostCluster(tabs, seedTabId, clusterOptions(settings));
+  const describe = (ids) =>
+    ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((t) => ({ id: t.id, title: t.title || t.url, host: hostLabel(t.url) }));
+  return {
+    related: { ids: related.ids, tabs: describe(related.ids), skipped: related.skipped.length },
+    site: { host: site.host, ids: site.ids, tabs: describe(site.ids), skipped: site.skipped.length },
+  };
+}
+
+// --- clutter review ----------------------------------------------------------
+
+/** Ranked proposal of tabs you're probably done with. Never closes anything. */
+export async function clutterReport({ allWindows, windowId } = {}) {
+  const settings = await getSettings();
+  const wide = allWindows ?? settings.sweepAllWindows;
+  let scope;
+  if (wide) scope = { windowType: 'normal' };
+  else if (windowId != null) scope = { windowId, windowType: 'normal' };
+  else scope = { currentWindow: true, windowType: 'normal' };
+
+  const [tabs, { byId }] = await Promise.all([chrome.tabs.query(scope), intelMaps()]);
+  const suggestions = suggestClosures(
+    tabs,
+    byId,
+    {
+      threshold: Number(settings.clutterThreshold) || 3,
+      idleAfterHours: Number(settings.idleAfterHours) || 2,
+      disposablePatterns: settings.disposablePatterns || [],
+      protectPatterns: settings.protectPatterns || [],
+      respectGroups: settings.respectGroups !== false,
+    },
+    Date.now(),
+  );
+  return { count: suggestions.length, suggestions, scanned: tabs.length };
+}
+
 async function armBypass() {
   await chrome.storage.session.set({ bypassUntil: Date.now() + BYPASS_ARM_MS });
   chrome.action.setBadgeBackgroundColor({ color: '#8A37F4' });
@@ -360,6 +573,7 @@ async function armBypass() {
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === 'bypass-next') return armBypass();
+  if (command === 'undo-last-close') return undoLastClose();
   if (command === 'sweep-now') {
     const count = await closeDuplicates();
     flashBadge(count);
@@ -384,29 +598,72 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     });
     return true; // async response
   }
+  if (msg.type === 'clutter') {
+    clutterReport({ allWindows: msg.allWindows, windowId: msg.windowId }).then(respond);
+    return true;
+  }
+  if (msg.type === 'closeIds') {
+    closeWithUndo(msg.ids || [], msg.what || 'close selected').then((count) => respond({ count }));
+    return true;
+  }
+  if (msg.type === 'undo') {
+    undoLastClose().then((restored) => respond({ restored }));
+    return true;
+  }
+  if (msg.type === 'relatedReport') {
+    relatedReport(msg.tabId).then(respond);
+    return true;
+  }
   return false;
 });
 
-/** Right-click the toolbar icon for both scopes without opening the popup. */
+/**
+ * Menus. `action` items hang off the toolbar icon; `tab` items appear when you
+ * right-click a tab in the strip, which is where the related-tab actions belong.
+ */
 const MENU_ITEMS = [
-  { id: 'sweep-window', title: 'Close duplicate tabs in this window' },
-  { id: 'sweep-all', title: 'Close duplicate tabs in all windows' },
+  { id: 'sweep-window', title: 'Close duplicate tabs in this window', contexts: ['action'] },
+  { id: 'sweep-all', title: 'Close duplicate tabs in all windows', contexts: ['action'] },
+  { id: 'undo-last-close', title: 'Undo close', contexts: ['action'], enabled: false },
+  { id: 'close-related', title: 'Close related tabs', contexts: ['tab'] },
+  { id: 'close-same-site', title: 'Close other tabs from this site', contexts: ['tab'] },
+  { id: 'close-duplicates-tab', title: 'Close duplicate tabs', contexts: ['tab'] },
 ];
 
-chrome.runtime.onInstalled.addListener((details) => {
+function createMenus() {
   chrome.contextMenus.removeAll(() => {
-    for (const item of MENU_ITEMS) {
-      chrome.contextMenus.create({ ...item, contexts: ['action'] });
-    }
+    for (const item of MENU_ITEMS) chrome.contextMenus.create(item);
   });
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
+  createMenus();
   console.log(`${LOG} installed (${details.reason})`);
 });
 
+// Menus live only as long as the browser session, so rebuild them on startup too.
+chrome.runtime.onStartup.addListener(createMenus);
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== 'sweep-window' && info.menuItemId !== 'sweep-all') return;
-  const count = await closeDuplicates({
-    allWindows: info.menuItemId === 'sweep-all',
-    windowId: tab ? tab.windowId : undefined,
-  });
-  flashBadge(count);
+  const windowId = tab ? tab.windowId : undefined;
+  switch (info.menuItemId) {
+    case 'sweep-window':
+    case 'close-duplicates-tab':
+      flashBadge(await closeDuplicates({ allWindows: false, windowId }));
+      break;
+    case 'sweep-all':
+      flashBadge(await closeDuplicates({ allWindows: true, windowId }));
+      break;
+    case 'close-related':
+      if (tab) await closeRelatedTabs(tab.id);
+      break;
+    case 'close-same-site':
+      if (tab) await closeSameSiteTabs(tab.id);
+      break;
+    case 'undo-last-close':
+      await undoLastClose();
+      break;
+    default:
+      break;
+  }
 });

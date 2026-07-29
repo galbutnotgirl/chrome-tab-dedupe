@@ -62,6 +62,59 @@
       </section>
 
       <section>
+        <h2>Clutter review</h2>
+        <p class="note" style="margin-top:0">
+          The <strong>Clutter</strong> tab in the popup ranks tabs you're probably done with and
+          explains why. It only ever proposes — you tick what closes, and Undo restores it.
+        </p>
+        <label class="inline">
+          How eager should it be?
+          <select data-setting="clutterThreshold" data-type="number">
+            <option value="4">Cautious — only obvious junk</option>
+            <option value="3">Balanced</option>
+            <option value="2">Eager — surface more</option>
+          </select>
+        </label>
+        <label class="inline">
+          Count a tab as idle after
+          <input type="number" data-setting="idleAfterHours" data-type="number" min="1" max="72" step="1" />
+          hours
+        </label>
+
+        <h3>Tabs I usually don't need afterwards</h3>
+        <textarea id="disposablePatterns" rows="4" spellcheck="false"
+          placeholder="google search&#10;yelp&#10;flight status"></textarea>
+        <p class="note">
+          One rough phrase per line, matched loosely against each tab's title and URL — no regex, no
+          exact spelling needed. Lines starting with <code>#</code> are ignored.
+        </p>
+
+        <h3>Never propose closing</h3>
+        <textarea id="protectPatterns" rows="3" spellcheck="false"
+          placeholder="payroll&#10;offer letter"></textarea>
+        <p class="note">Wins over every other signal. Pinned, grouped, and audible tabs are already safe.</p>
+      </section>
+
+      <section>
+        <h2>Related tabs</h2>
+        <p class="note" style="margin-top:0">
+          Right-click any tab → <strong>Close related tabs</strong> closes that whole excursion: the
+          tab it was opened from, and everything opened from those. Chrome records which tab opened
+          which, so this follows your actual trail rather than guessing by keyword.
+        </p>
+        <label class="inline">
+          Treat a tab as a new excursion if it was opened
+          <input type="number" data-setting="clusterGapMinutes" data-type="number" min="1" max="240" step="1" />
+          minutes after its parent
+        </label>
+        <p class="note">
+          This is the guard that stops it climbing into a tab you keep open all day. Also on that
+          menu: <strong>Close other tabs from this site</strong>, and <strong>Close duplicate tabs</strong>.
+          Undo is <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>.
+        </p>
+      </section>
+
+      <section>
         <h2>Sweep</h2>
         <label><input type="checkbox" data-setting="sweepAllWindows" /> Toolbar button sweeps all windows (default: current window only)</label>
         <p><button id="sweep">Close duplicate tabs now</button> <span id="sweepResult" class="note"></span></p>

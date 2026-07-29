@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Tab Dedupe",
-  "version": "1.0.1",
-  "description": "Opens the tab you already have instead of a second copy — and moves it next to the tab you're on.",
-  "permissions": ["tabs", "tabGroups", "storage", "contextMenus"],
+  "version": "1.1.0",
+  "description": "Opens the tab you already have instead of a second copy \u2014 and moves it next to the tab you're on.",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "contextMenus",
+    "sessions"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -30,12 +36,22 @@
       "description": "Open Tab Dedupe"
     },
     "sweep-now": {
-      "suggested_key": { "default": "Alt+Shift+D" },
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
       "description": "Close duplicate tabs immediately (no popup)"
     },
     "bypass-next": {
-      "suggested_key": { "default": "Alt+Shift+N" },
+      "suggested_key": {
+        "default": "Alt+Shift+N"
+      },
       "description": "Next tab opens as a new copy (skip dedupe)"
+    },
+    "undo-last-close": {
+      "suggested_key": {
+        "default": "Alt+Shift+Z"
+      },
+      "description": "Undo the last close"
     }
   }
 }

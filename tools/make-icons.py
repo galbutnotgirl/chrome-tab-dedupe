@@ -9,6 +9,7 @@ Usage:  python3 tools/make-icons.py
 Output: icons/icon{16,32,48,128}.png (relative to the repo root)
 """
 
+import argparse
 import struct
 import zlib
 from pathlib import Path
@@ -56,8 +57,15 @@ def sample(x, y):
     return PURPLE + (255,)
 
 
-def render(size):
+def render(size, pad=0.0):
+    """`pad` is transparent margin as a fraction of the canvas on each side.
+
+    The Chrome Web Store wants a 128x128 store icon whose artwork is 96x96 with
+    16px of transparent padding per side — that's pad=0.125. Toolbar icons are
+    full bleed (pad=0).
+    """
     hi = size * SUPERSAMPLE
+    span = 1.0 - 2 * pad
     rows = []
     for py in range(size):
         row = bytearray()
@@ -67,6 +75,11 @@ def render(size):
                 for sx in range(SUPERSAMPLE):
                     ux = (px * SUPERSAMPLE + sx + 0.5) / hi
                     uy = (py * SUPERSAMPLE + sy + 0.5) / hi
+                    if pad:
+                        ux = (ux - pad) / span
+                        uy = (uy - pad) / span
+                        if not (0.0 <= ux <= 1.0 and 0.0 <= uy <= 1.0):
+                            continue  # transparent margin
                     cr, cg, cb, ca = sample(ux, uy)
                     # Premultiply so partially transparent samples average correctly.
                     r += cr * ca
@@ -103,10 +116,23 @@ def write_png(path, size, rows):
 
 
 def main():
-    ICON_DIR.mkdir(exist_ok=True)
-    for size in SIZES:
-        out = ICON_DIR / f"icon{size}.png"
-        write_png(out, size, render(size))
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--out", default="icons", help="output directory, relative to repo root")
+    parser.add_argument("--sizes", default=",".join(str(s) for s in SIZES), help="comma-separated")
+    parser.add_argument("--prefix", default="icon", help="filename prefix before the size")
+    parser.add_argument(
+        "--pad",
+        type=float,
+        default=0.0,
+        help="transparent margin per side as a fraction (0.125 for the store icon)",
+    )
+    args = parser.parse_args()
+
+    out_dir = REPO_ROOT / args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for size in [int(s) for s in args.sizes.split(",") if s.strip()]:
+        out = out_dir / f"{args.prefix}{size}.png"
+        write_png(out, size, render(size, args.pad))
         print(f"wrote {out.relative_to(REPO_ROOT)} ({out.stat().st_size} bytes)")
 
 
