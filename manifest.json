@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Dedupe",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Opens the tab you already have instead of a second copy \u2014 and moves it next to the tab you're on.",
   "permissions": [
     "tabs",
@@ -46,12 +46,6 @@
         "default": "Alt+Shift+N"
       },
       "description": "Next tab opens as a new copy (skip dedupe)"
-    },
-    "undo-last-close": {
-      "suggested_key": {
-        "default": "Alt+Shift+Z"
-      },
-      "description": "Undo the last close"
     }
   }
 }

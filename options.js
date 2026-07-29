@@ -2,32 +2,48 @@ import { RULES } from './lib/normalize.js';
 import { parsePatterns } from './lib/fuzzy.js';
 import { DEFAULTS, getSettings, setSettings } from './lib/settings.js';
 
-const savedFlash = document.getElementById('saved');
-let flashTimer;
+const savedPill = document.getElementById('saved');
+let savedTimer;
 
 function flashSaved() {
-  savedFlash.classList.add('show');
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => savedFlash.classList.remove('show'), 900);
+  savedPill.classList.add('show');
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => savedPill.classList.remove('show'), 1100);
 }
 
-// Per-site rule checkboxes are generated from RULES, so adding a rule to
-// lib/normalize.js is all it takes to expose it here.
+const settings = await getSettings();
+
+// --- per-site rules: built from RULES, so adding one needs no markup ---------
+
 const rulesHost = document.getElementById('rules');
+const rulesCount = document.getElementById('rulesCount');
+
 for (const rule of RULES) {
   const label = document.createElement('label');
   const box = document.createElement('input');
   box.type = 'checkbox';
   box.dataset.rule = rule.id;
-  label.append(box, document.createTextNode(rule.label));
+
+  const text = document.createElement('span');
+  const site = document.createElement('span');
+  site.className = 'site';
+  site.textContent = rule.site || rule.id;
+  const detail = document.createElement('span');
+  detail.className = 'detail';
+  detail.textContent = rule.label;
+  text.append(site, detail);
+
+  label.append(box, text);
   rulesHost.append(label);
 }
 
-function syncRulesEnabled(smartRules) {
-  rulesHost.classList.toggle('disabled', !smartRules);
+function updateRulesSummary() {
+  const on = rulesHost.querySelectorAll('[data-rule]:checked').length;
+  rulesCount.textContent = `Per-site rules — ${on} of ${RULES.length} on`;
+  rulesHost.classList.toggle('disabled', !document.querySelector('[data-setting="smartRules"]').checked);
 }
 
-const settings = await getSettings();
+// --- settings bindings ------------------------------------------------------
 
 for (const el of document.querySelectorAll('[data-setting]')) {
   const key = el.dataset.setting;
@@ -47,17 +63,7 @@ for (const el of document.querySelectorAll('[data-setting]')) {
       value = el.checked;
     }
     await setSettings({ [key]: value });
-    if (key === 'smartRules') syncRulesEnabled(el.checked);
-    flashSaved();
-  });
-}
-
-// Fuzzy pattern lists: stored as arrays, edited as one-per-line text.
-for (const id of ['disposablePatterns', 'protectPatterns']) {
-  const box = document.getElementById(id);
-  box.value = (settings[id] || []).join('\n');
-  box.addEventListener('change', async () => {
-    await setSettings({ [id]: parsePatterns(box.value) });
+    if (key === 'smartRules') updateRulesSummary();
     flashSaved();
   });
 }
@@ -70,39 +76,60 @@ for (const el of rulesHost.querySelectorAll('[data-rule]')) {
     if (el.checked) off.delete(el.dataset.rule);
     else off.add(el.dataset.rule);
     await setSettings({ disabledRules: [...off] });
+    updateRulesSummary();
     flashSaved();
   });
 }
-syncRulesEnabled(settings.smartRules);
+updateRulesSummary();
 
-const hostsBox = document.getElementById('ignoreHosts');
-hostsBox.value = (settings.ignoreHosts || DEFAULTS.ignoreHosts).join('\n');
-hostsBox.addEventListener('change', async () => {
-  const hosts = hostsBox.value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  await setSettings({ ignoreHosts: hosts });
-  flashSaved();
-});
+// Line-per-entry text areas, stored as arrays.
+const LISTS = {
+  disposablePatterns: parsePatterns,
+  ignoreHosts: (raw) =>
+    raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+};
 
-const armResult = document.getElementById('armResult');
-document.getElementById('arm').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ type: 'armBypass' }, (res) => {
-    const secs = res && res.armedMs ? Math.round(res.armedMs / 1000) : 15;
-    armResult.textContent = `Armed — the next tab you open stays (${secs}s).`;
+for (const [id, parse] of Object.entries(LISTS)) {
+  const box = document.getElementById(id);
+  box.value = (settings[id] || DEFAULTS[id] || []).join('\n');
+  box.addEventListener('change', async () => {
+    await setSettings({ [id]: parse(box.value) });
+    flashSaved();
   });
-});
+}
 
 // chrome:// links can't be navigated from an extension page, but tabs.create can.
 document.getElementById('shortcuts').addEventListener('click', () => {
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 });
 
-const result = document.getElementById('sweepResult');
-document.getElementById('sweep').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ type: 'sweep' }, (res) => {
-    const n = res && typeof res.count === 'number' ? res.count : 0;
-    result.textContent = n ? `Closed ${n} duplicate tab${n === 1 ? '' : 's'}.` : 'No duplicates found.';
-  });
-});
+// --- nav highlighting -------------------------------------------------------
+
+const links = [...document.querySelectorAll('.nav a')];
+const sections = links
+  .map((a) => document.getElementById(a.getAttribute('href').slice(1)))
+  .filter(Boolean);
+
+// Track everything currently on screen and highlight the topmost one. Reacting to
+// each entry individually lets whichever fired last win, which picks the wrong
+// section on load.
+const onScreen = new Set();
+
+const spy = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) onScreen.add(entry.target.id);
+      else onScreen.delete(entry.target.id);
+    }
+    const active = sections.find((s) => onScreen.has(s.id));
+    if (!active) return;
+    for (const link of links) {
+      link.classList.toggle('current', link.getAttribute('href') === `#${active.id}`);
+    }
+  },
+  { rootMargin: '-96px 0px -55% 0px' },
+);
+for (const section of sections) spy.observe(section);

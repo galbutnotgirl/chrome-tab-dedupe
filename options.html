@@ -2,127 +2,174 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Tab Dedupe — settings</title>
+    <title>Tab Dedupe — Settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <main>
-      <h1>Tab Dedupe</h1>
-      <p class="lede">
-        When you open something that's already in a tab, the new tab closes and the one you
-        already had moves next to the tab you're on.
-      </p>
+    <header class="top">
+      <div class="brand">
+        <img src="icons/icon48.png" alt="" width="30" height="30" />
+        <div>
+          <h1>Tab Dedupe</h1>
+          <p>Settings</p>
+        </div>
+      </div>
+      <span class="saved" id="saved">Saved</span>
+    </header>
 
-      <section>
-        <h2>Behavior</h2>
-        <label><input type="checkbox" data-setting="autoDedupe" /> Close the new tab when the page is already open</label>
-        <label><input type="checkbox" data-setting="moveNextToCurrent" /> Move the existing tab to the slot right of the tab I'm on</label>
-        <label><input type="checkbox" data-setting="matchAllWindows" /> Look for the existing tab in all windows</label>
-        <label><input type="checkbox" data-setting="respectGroups" /> Leave tabs that are in a tab group where they are</label>
-        <p class="note">
-          Only tabs that were <em>just opened</em> get redirected. Navigating a tab you're already
-          working in is never touched, and a tab alone in its own window is left alone.
+    <div class="shell">
+      <nav class="nav" id="nav">
+        <a href="#duplicates" class="current">Duplicates</a>
+        <a href="#matching">Same document</a>
+        <a href="#cleanup">Cleanup</a>
+        <a href="#advanced">Advanced</a>
+      </nav>
+
+      <main>
+        <section class="panel" id="duplicates">
+          <h2>Duplicates</h2>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Reuse the tab I already have</span>
+              <span class="desc">Open something twice and the new tab closes instead.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="autoDedupe" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Bring it next to me</span>
+              <span class="desc">The tab moves beside the one you're on.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="moveNextToCurrent" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Search every window</span>
+              <span class="desc">Off: only the window you're in.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="matchAllWindows" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Twice in a row means I meant it</span>
+              <span class="desc">Repeat within 8 seconds and you get a real second copy.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="repeatOpensNewTab" /><span></span></span>
+          </label>
+        </section>
+
+        <section class="panel" id="matching">
+          <h2>Same document</h2>
+          <p class="intro">
+            A link to slide 14 is the same deck you already have open. These rules ignore the part of
+            a URL that only says <em>where</em> you are in a document.
+          </p>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Recognize documents by ID</span>
+              <span class="desc">Off: URLs must match character for character.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="smartRules" /><span></span></span>
+          </label>
+
+          <details id="rulesBox">
+            <summary><span id="rulesCount">Per-site rules</span></summary>
+            <div class="rules" id="rules"></div>
+          </details>
+        </section>
+
+        <section class="panel" id="cleanup">
+          <h2>Cleanup</h2>
+          <p class="intro">
+            The popup's <strong>Clutter</strong> tab ranks tabs you're probably done with. It only
+            proposes — you tick what closes, and Undo brings them back.
+          </p>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">How much to suggest</span>
+              <span class="desc">How readily a tab shows up in the list.</span>
+            </div>
+            <select data-setting="clutterThreshold" data-type="number">
+              <option value="4">A little</option>
+              <option value="3">Normal</option>
+              <option value="2">A lot</option>
+            </select>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Count as idle after</span>
+              <span class="desc">Hours without you looking at it.</span>
+            </div>
+            <input type="number" data-setting="idleAfterHours" data-type="number" min="1" max="72" step="1" />
+          </label>
+
+          <div class="row stack">
+            <div class="text">
+              <span class="label">Tabs I'm usually done with</span>
+              <span class="desc">One phrase per line. Matched loosely against title and address.</span>
+            </div>
+            <textarea id="disposablePatterns" rows="3" spellcheck="false"
+              placeholder="google search&#10;flight status"></textarea>
+          </div>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Start a new trail after</span>
+              <span class="desc">Minutes. Used by <strong>Close related tabs</strong> to know where a trail begins.</span>
+            </div>
+            <input type="number" data-setting="clusterGapMinutes" data-type="number" min="1" max="240" step="1" />
+          </label>
+        </section>
+
+        <section class="panel" id="advanced">
+          <h2>Advanced</h2>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Don't move grouped tabs</span>
+              <span class="desc">Moving one out of a group would remove it from the group.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="respectGroups" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Ignore URL query strings</span>
+              <span class="desc">Blunt — treats two different searches as one page.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="ignoreQuery" /><span></span></span>
+          </label>
+
+          <div class="row stack">
+            <div class="text">
+              <span class="label">Never touch these sites</span>
+              <span class="desc">One host per line. Subdomains included.</span>
+            </div>
+            <textarea id="ignoreHosts" rows="2" spellcheck="false"></textarea>
+          </div>
+
+          <div class="row">
+            <div class="text">
+              <span class="label">Keyboard shortcuts</span>
+              <span class="desc">Close duplicates, and let the next tab through.</span>
+            </div>
+            <button id="shortcuts" class="btn">Change</button>
+          </div>
+        </section>
+
+        <p class="foot">
+          Pinned, grouped, and playing tabs are never closed. Nothing here leaves your browser.
         </p>
-      </section>
+      </main>
+    </div>
 
-      <section>
-        <h2>When you really do want a second copy</h2>
-        <label><input type="checkbox" data-setting="repeatOpensNewTab" /> Opening the same thing twice in a row opens a real second tab</label>
-        <p class="note">
-          Tab jumped over to you and you actually wanted a fresh copy? Do it again within 8
-          seconds and the second one is left alone.
-        </p>
-        <p>
-          <button id="arm">Arm bypass for next tab</button>
-          <span id="armResult" class="note"></span>
-        </p>
-        <p class="note">
-          Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>, then open the link — it works
-          with the address bar focused, so you can arm it before you hit Enter. The toolbar icon
-          shows <strong>NEW</strong> while it's armed (15 seconds, or until used).
-        </p>
-        <p class="note">
-          Chrome doesn't let extensions see modifier keys held in the address bar, so
-          Shift+Enter itself can't be detected — these two cover it instead.
-          <button id="shortcuts" class="link">Change shortcuts</button>
-        </p>
-      </section>
-
-      <section>
-        <h2>Same-document matching</h2>
-        <label><input type="checkbox" data-setting="smartRules" /> Use per-site rules to recognize the same document at different URLs</label>
-        <div id="rules"></div>
-        <label><input type="checkbox" data-setting="ignoreQuery" /> Ignore every query string (blunt — affects search and app URLs too)</label>
-      </section>
-
-      <section>
-        <h2>Never dedupe these hosts</h2>
-        <textarea id="ignoreHosts" rows="4" spellcheck="false"></textarea>
-        <p class="note">One host per line. Subdomains included.</p>
-      </section>
-
-      <section>
-        <h2>Clutter review</h2>
-        <p class="note" style="margin-top:0">
-          The <strong>Clutter</strong> tab in the popup ranks tabs you're probably done with and
-          explains why. It only ever proposes — you tick what closes, and Undo restores it.
-        </p>
-        <label class="inline">
-          How eager should it be?
-          <select data-setting="clutterThreshold" data-type="number">
-            <option value="4">Cautious — only obvious junk</option>
-            <option value="3">Balanced</option>
-            <option value="2">Eager — surface more</option>
-          </select>
-        </label>
-        <label class="inline">
-          Count a tab as idle after
-          <input type="number" data-setting="idleAfterHours" data-type="number" min="1" max="72" step="1" />
-          hours
-        </label>
-
-        <h3>Tabs I usually don't need afterwards</h3>
-        <textarea id="disposablePatterns" rows="4" spellcheck="false"
-          placeholder="google search&#10;yelp&#10;flight status"></textarea>
-        <p class="note">
-          One rough phrase per line, matched loosely against each tab's title and URL — no regex, no
-          exact spelling needed. Lines starting with <code>#</code> are ignored.
-        </p>
-
-        <h3>Never propose closing</h3>
-        <textarea id="protectPatterns" rows="3" spellcheck="false"
-          placeholder="payroll&#10;offer letter"></textarea>
-        <p class="note">Wins over every other signal. Pinned, grouped, and audible tabs are already safe.</p>
-      </section>
-
-      <section>
-        <h2>Related tabs</h2>
-        <p class="note" style="margin-top:0">
-          Right-click any tab → <strong>Close related tabs</strong> closes that whole excursion: the
-          tab it was opened from, and everything opened from those. Chrome records which tab opened
-          which, so this follows your actual trail rather than guessing by keyword.
-        </p>
-        <label class="inline">
-          Treat a tab as a new excursion if it was opened
-          <input type="number" data-setting="clusterGapMinutes" data-type="number" min="1" max="240" step="1" />
-          minutes after its parent
-        </label>
-        <p class="note">
-          This is the guard that stops it climbing into a tab you keep open all day. Also on that
-          menu: <strong>Close other tabs from this site</strong>, and <strong>Close duplicate tabs</strong>.
-          Undo is <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>.
-        </p>
-      </section>
-
-      <section>
-        <h2>Sweep</h2>
-        <label><input type="checkbox" data-setting="sweepAllWindows" /> Toolbar button sweeps all windows (default: current window only)</label>
-        <p><button id="sweep">Close duplicate tabs now</button> <span id="sweepResult" class="note"></span></p>
-        <p class="note">Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>. Pinned tabs are never closed.</p>
-      </section>
-
-      <p class="saved" id="saved">Saved</p>
-    </main>
     <script type="module" src="options.js"></script>
   </body>
 </html>

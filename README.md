@@ -91,7 +91,7 @@ climb at all and closes only the clicked tab and its descendants. A smaller clus
 your morning.
 
 **Everything is undoable.** Every bulk close records how many tabs went, and Undo reopens them via Chrome's
-own session history — the popup's Undo link, the toolbar right-click menu, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>.
+own session history — the popup's Undo link, or right-click the toolbar icon → **Undo close**.
 
 ## Clutter review
 
@@ -106,12 +106,13 @@ Signals, each worth points:
 - **Opened but never viewed** — the strongest single signal, and the one that catches a background
   cmd+click pile.
 - **Already unloaded by Chrome**, which is Chrome agreeing with you.
-- **Your own fuzzy rules** — plain phrases like `google search` or `flight status`, one per line in Options,
+- **Your own phrases** — plain text like `google search` or `flight status`, one per line in Settings,
   matched loosely against title and URL. No regex, no exact spelling.
 - **A pile on one site** — four or more tabs on the same host reads as research.
 
-Never proposed, whatever the score: pinned, audible, active, grouped tabs, and anything matching your
-**never propose** list. Eagerness is a three-way setting (cautious / balanced / eager).
+Never proposed, whatever the score: **pinned, grouped, audible, and active tabs**. That's the whole
+protection model — if a tab must survive, pin it or group it, the same as you'd protect it from any other
+tab tool. Eagerness is a three-way setting: a little / normal / a lot.
 
 ## When you really do want a second copy
 
@@ -134,21 +135,18 @@ One wrinkle worth knowing: if the tab you're on is *inside* a group and the exis
 
 ## Settings
 
-| Setting | Default |
-|---------|---------|
-| Close the new tab when the page is already open | on |
-| Move the existing tab next to the tab I'm on | on |
-| Look for the existing tab in all windows | on |
-| Leave tabs that are in a tab group where they are | on |
-| Opening the same thing twice in a row opens a real second tab | on |
-| Per-site same-document rules | on |
-| Ignore every query string | off — too blunt for search and app URLs |
-| Toolbar sweep covers all windows | off — current window only |
-| Never dedupe these hosts | `localhost`, `127.0.0.1` |
-| Clutter eagerness | balanced (score 3) |
-| Count a tab idle after | 2 hours |
-| Tabs I usually don't need / never propose | empty — your own phrases |
-| New excursion after | 15 minutes past the parent |
+Four groups, one line of plain English each. Open with right-click the icon → **Options**.
+
+| Group | Settings |
+|---|---|
+| **Duplicates** | Reuse the tab I already have · Bring it next to me · Search every window · Twice in a row means I meant it |
+| **Same document** | Recognize documents by ID, plus a per-site list you can switch off one site at a time |
+| **Cleanup** | How much to suggest · Count as idle after · Tabs I'm usually done with · Start a new trail after |
+| **Advanced** | Don't move grouped tabs · Ignore URL query strings · Never touch these sites · Keyboard shortcuts |
+
+Two shortcuts, both rebindable at `chrome://extensions/shortcuts`: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>
+closes duplicates, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> lets the next tab through.
+
 
 ## Troubleshooting
 
