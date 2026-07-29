@@ -1,0 +1,11 @@
+{
+  "name": "chrome-tab-dedupe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension: opens the tab you already have instead of a duplicate, and moves it next to the tab you're on.",
+  "scripts": {
+    "test": "node --test test/normalize.test.mjs",
+    "icons": "python3 tools/make-icons.py"
+  }
+}

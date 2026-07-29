@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="scope">
+      <button data-scope="window" class="seg">This window</button>
+      <button data-scope="all" class="seg">All windows</button>
+    </div>
+
+    <p id="summary" class="summary">Checking…</p>
+    <ul id="list" class="list"></ul>
+
+    <button id="sweep" class="primary" disabled>Close duplicates</button>
+
+    <div class="row">
+      <label class="toggle">
+        <input type="checkbox" id="autoDedupe" />
+        Auto-close new duplicate tabs
+      </label>
+    </div>
+
+    <div class="footer">
+      <button id="arm" class="link">Let the next tab through</button>
+      <button id="options" class="link">Settings</button>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Tab Dedupe — settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Tab Dedupe</h1>
+      <p class="lede">
+        When you open something that's already in a tab, the new tab closes and the one you
+        already had moves next to the tab you're on.
+      </p>
+
+      <section>
+        <h2>Behavior</h2>
+        <label><input type="checkbox" data-setting="autoDedupe" /> Close the new tab when the page is already open</label>
+        <label><input type="checkbox" data-setting="moveNextToCurrent" /> Move the existing tab to the slot right of the tab I'm on</label>
+        <label><input type="checkbox" data-setting="matchAllWindows" /> Look for the existing tab in all windows</label>
+        <label><input type="checkbox" data-setting="respectGroups" /> Leave tabs that are in a tab group where they are</label>
+        <p class="note">
+          Only tabs that were <em>just opened</em> get redirected. Navigating a tab you're already
+          working in is never touched, and a tab alone in its own window is left alone.
+        </p>
+      </section>
+
+      <section>
+        <h2>When you really do want a second copy</h2>
+        <label><input type="checkbox" data-setting="repeatOpensNewTab" /> Opening the same thing twice in a row opens a real second tab</label>
+        <p class="note">
+          Tab jumped over to you and you actually wanted a fresh copy? Do it again within 8
+          seconds and the second one is left alone.
+        </p>
+        <p>
+          <button id="arm">Arm bypass for next tab</button>
+          <span id="armResult" class="note"></span>
+        </p>
+        <p class="note">
+          Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>, then open the link — it works
+          with the address bar focused, so you can arm it before you hit Enter. The toolbar icon
+          shows <strong>NEW</strong> while it's armed (15 seconds, or until used).
+        </p>
+        <p class="note">
+          Chrome doesn't let extensions see modifier keys held in the address bar, so
+          Shift+Enter itself can't be detected — these two cover it instead.
+          <button id="shortcuts" class="link">Change shortcuts</button>
+        </p>
+      </section>
+
+      <section>
+        <h2>Same-document matching</h2>
+        <label><input type="checkbox" data-setting="smartRules" /> Use per-site rules to recognize the same document at different URLs</label>
+        <div id="rules"></div>
+        <label><input type="checkbox" data-setting="ignoreQuery" /> Ignore every query string (blunt — affects search and app URLs too)</label>
+      </section>
+
+      <section>
+        <h2>Never dedupe these hosts</h2>
+        <textarea id="ignoreHosts" rows="4" spellcheck="false"></textarea>
+        <p class="note">One host per line. Subdomains included.</p>
+      </section>
+
+      <section>
+        <h2>Sweep</h2>
+        <label><input type="checkbox" data-setting="sweepAllWindows" /> Toolbar button sweeps all windows (default: current window only)</label>
+        <p><button id="sweep">Close duplicate tabs now</button> <span id="sweepResult" class="note"></span></p>
+        <p class="note">Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>. Pinned tabs are never closed.</p>
+      </section>
+
+      <p class="saved" id="saved">Saved</p>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
