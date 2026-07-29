@@ -3,6 +3,8 @@ import { getSettings } from './lib/settings.js';
 import { stillPending, chooseAnchorId, targetIndexFor, shouldMove } from './lib/decide.js';
 import { relatedCluster, sameHostCluster } from './lib/cluster.js';
 import { suggestClosures } from './lib/staleness.js';
+import { searchTabs } from './lib/search.js';
+import { colorForTitle, groupableTabs, partitionByWindow, groupTitle } from './lib/grouping.js';
 
 const LOG = '[TabDedupe]';
 
@@ -601,6 +603,71 @@ async function takeSeed() {
   return pendingSeed.tabId;
 }
 
+// --- find --------------------------------------------------------------------
+
+/**
+ * Search every tab. Copies of one document fold into a single result, so acting
+ * on a hit acts on all of its copies.
+ */
+export async function findTabs(query) {
+  const settings = await getSettings();
+  const tabs = await normalTabs();
+  const results = searchTabs(query, tabs, {
+    keyOf: (tab) => keyForUrl(tab.url || tab.pendingUrl, settings),
+    limit: 20,
+  });
+  return { query, count: results.length, results };
+}
+
+// --- grouping ----------------------------------------------------------------
+
+/**
+ * Collapse a set of tabs into a named Chrome tab group instead of closing them.
+ *
+ * chrome.tabs.group only works within one window, so a trail that spans windows
+ * becomes one identically-named group per window rather than an error.
+ */
+export async function groupIds(ids, label) {
+  const tabs = await normalTabs();
+  const { eligible, skipped } = groupableTabs(tabs, ids || []);
+  if (!eligible.length) {
+    console.log(`${LOG} group: nothing groupable (${skipped.length} pinned)`);
+    return { groups: 0, grouped: 0, skipped: skipped.length, title: '' };
+  }
+
+  const title = label || groupTitle(eligible);
+  const color = colorForTitle(title);
+
+  let groups = 0;
+  let grouped = 0;
+  for (const [, tabIds] of partitionByWindow(eligible)) {
+    try {
+      const groupId = await chrome.tabs.group({ tabIds });
+      await chrome.tabGroups.update(groupId, { title, color, collapsed: true });
+      groups += 1;
+      grouped += tabIds.length;
+    } catch (e) {
+      console.warn(`${LOG} group failed: ${e.message}`);
+    }
+  }
+
+  console.log(`${LOG} grouped ${grouped} tab(s) as "${title}" into ${groups} group(s)`);
+  flashBadge(0);
+  chrome.action.setBadgeText({ text: String(grouped) });
+  setTimeout(() => chrome.action.setBadgeText({ text: '' }), 3000);
+  return { groups, grouped, skipped: skipped.length, title };
+}
+
+export async function groupRelated(seedTabId) {
+  const settings = await getSettings();
+  const [tabs, { parentOf, meta }] = await Promise.all([normalTabs(), intelMaps()]);
+  const { ids } = relatedCluster(tabs, parentOf, seedTabId, {
+    ...clusterOptions(settings),
+    meta,
+  });
+  return groupIds(ids, null);
+}
+
 // --- clutter review ----------------------------------------------------------
 
 /** Ranked proposal of tabs you're probably done with. Never closes anything. */
@@ -696,6 +763,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     relatedReport(msg.tabId).then(respond);
     return true;
   }
+  if (msg.type === 'find') {
+    findTabs(msg.query || '').then(respond);
+    return true;
+  }
+  if (msg.type === 'groupIds') {
+    groupIds(msg.ids || [], msg.label || null).then(respond);
+    return true;
+  }
   if (msg.type === 'takeSeed') {
     takeSeed().then((tabId) => respond({ tabId }));
     return true;
@@ -712,6 +787,7 @@ const MENU_ITEMS = [
   { id: 'sweep-all', title: 'Close duplicate tabs in all windows', contexts: ['action'] },
   { id: 'undo-last-close', title: 'Undo close', contexts: ['action'], enabled: false },
   { id: 'review-related', title: 'Review related tabs…', contexts: ['tab'] },
+  { id: 'group-related', title: 'Group related tabs', contexts: ['tab'] },
   { id: 'close-related', title: 'Close related tabs', contexts: ['tab'] },
   { id: 'close-same-site', title: 'Close other tabs from this site', contexts: ['tab'] },
   { id: 'close-duplicates-tab', title: 'Close duplicate tabs', contexts: ['tab'] },
@@ -758,6 +834,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       break;
     case 'review-related':
       if (tab) await reviewRelated(tab.id);
+      break;
+    case 'group-related':
+      if (tab) await groupRelated(tab.id);
       break;
     case 'close-related':
       if (tab) await closeRelatedTabs(tab.id);

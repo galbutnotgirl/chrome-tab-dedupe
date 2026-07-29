@@ -1,12 +1,14 @@
 # Tab Dedupe
 
-A local Chrome extension (MV3). Five jobs:
+A local Chrome extension (MV3). What it does:
 
 1. **No second copy.** Open something that's already in a tab and the new tab closes — the tab you already had gets focused instead.
 2. **It comes to you.** That existing tab moves into the slot immediately right of the tab you were on, so it's never "way over to the left" or buried in another window.
 3. **Clean up on demand.** Click the toolbar icon for a popup that lists what's duplicated and how many copies, then close them in one click.
 4. **Close a whole excursion.** Right-click any tab → **Close related tabs** and the research trail it belongs to goes with it.
 5. **Review the clutter.** The popup's **Clutter** tab ranks tabs you're probably done with, says why, and lets you tick what closes.
+6. **Find any tab by typing.** The search box at the top of the popup ranks every open tab, folds duplicate copies into one row, and jumps you there with Enter.
+7. **Group instead of closing.** Collapse a research trail into a named, colored tab group you can reopen later.
 
 ```
 ┌─────────────────────────────────┐
@@ -40,6 +42,35 @@ python3 tools/make-icons.py   # only if icons/ is missing
 
 Settings: right-click the icon → **Options**, or `chrome://extensions` → Details → Extension options.
 
+## Find
+
+The search box at the top of the popup searches every tab in every window. Type, and:
+
+- **↑ ↓** move the cursor, **Enter** opens the highlighted tab, **Esc** clears (then closes the popup).
+- Ranking is **tiered, not fuzzy soup**: a title that starts with your query always beats one that merely
+  contains it, which beats a word-by-word match, which beats an address match. A small score difference
+  never reorders an obvious hit below a vague one.
+- **Copies fold into one row** with a `2×` badge, using the same document identity as auto-dedupe — so
+  searching a deck you have open three times gives you one result, and acting on it acts on all three.
+- The tab you're on is marked `· here now`.
+- **Close every match** in one button, undoably — the fast way to clear a whole topic.
+
+Chrome has its own tab search (⇧⌘A). This one exists because it knows about document identity and can act
+on what it finds.
+
+## Group instead of closing
+
+Closing a research trail is one answer. Collapsing it into a named tab group is usually the better one:
+
+- Right-click a tab → **Group related tabs**, or use the **Group** button on any category in the
+  **Related** view.
+- The group gets a short name — the shared site if there is one (`kokkari`), otherwise the first tab's
+  title minus the boilerplate suffix sites append to everything — and a color derived from that name, so
+  regrouping the same trail tomorrow looks the same.
+- Groups arrive **collapsed**, which is the point: a trail becomes one chip in the tab strip.
+- Pinned tabs can't be grouped (Chrome doesn't allow it) and are reported as skipped. A trail spanning
+  windows becomes one identically-named group per window rather than an error.
+
 ## Same document, different URL
 
 This is the interesting part. A Slides link carrying `#slide=id.g12` is the same deck as the copy you already have open on slide 1 — a plain string compare misses it. So URLs get reduced to the thing a human would call the document, with view state thrown away:
@@ -64,11 +95,12 @@ Each rule has its own checkbox in Options. Adding one is a single entry in `RULE
 
 ## Close related tabs
 
-Right-click any tab. Four items:
+Right-click any tab. Five items:
 
 | Item | What it does |
 |---|---|
 | **Review related tabs…** | Opens the popup's **Related** view: every category, named and listed, before anything closes |
+| **Group related tabs** | Collapses the trail into a named tab group instead of closing it |
 | **Close related tabs** | The whole excursion that tab belongs to — the tab it was opened from, and everything opened from those |
 | **Close other tabs from this site** | Every other tab on the same host. The clicked tab stays |
 | **Close duplicate tabs** | Same sweep as the toolbar button |
@@ -228,6 +260,8 @@ lib/decide.js          eligibility + anchor + target index (pure, tested)
 lib/cluster.js         related-tab lineage, hub + time-gap guards (pure, tested)
 lib/staleness.js       clutter scoring with human-readable reasons (pure, tested)
 lib/fuzzy.js           loose phrase matching for user rules (pure, tested)
+lib/search.js          tiered tab-search ranking + copy folding (pure, tested)
+lib/grouping.js        group names, colors, and what may be grouped (pure, tested)
 lib/settings.js        defaults + chrome.storage.sync wrapper
 popup.html/.css/.js    toolbar popup: what's duplicated + one-click close
 options.html/.css/.js  settings UI, rule checkboxes generated from RULES

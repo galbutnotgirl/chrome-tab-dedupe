@@ -5,14 +5,23 @@
     <!-- The extension's own stylesheet, unmodified. -->
     <link rel="stylesheet" href="../popup.css" />
     <style>
+      /* Screenshot-only: pin the light palette so a listing image never depends on
+         the theme of whichever machine captured it. */
+      :root {
+        color-scheme: light;
+        --fg: #1c1c1e; --muted: #6b6b70; --bg: #ffffff;
+        --card: #f4f4f6; --line: #e2e2e5; --accent: #8a37f4;
+      }
       /* Only the scrollbar is suppressed, so the shot isn't a scrollbar photo. */
       body { overflow: hidden; }
     </style>
   </head>
   <body>
+    <input class="find" type="text" placeholder="Search all tabs…" />
     <div class="views">
       <button class="seg" aria-pressed="true">Duplicates</button>
       <button class="seg" aria-pressed="false">Clutter</button>
+      <button class="seg" aria-pressed="false">Related</button>
     </div>
     <div class="scope">
       <button class="seg" aria-pressed="true">This window</button>

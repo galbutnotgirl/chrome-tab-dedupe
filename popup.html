@@ -5,6 +5,9 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
+    <input id="find" class="find" type="text" placeholder="Search all tabs…"
+      autocomplete="off" spellcheck="false" autofocus />
+
     <div class="views">
       <button data-view="duplicates" class="seg">Duplicates</button>
       <button data-view="clutter" class="seg">Clutter</button>
@@ -19,6 +22,7 @@
     <p id="summary" class="summary">Checking…</p>
     <ul id="list" class="list"></ul>
     <div id="related" class="groups" hidden></div>
+    <ul id="results" class="list" hidden></ul>
 
     <button id="sweep" class="primary" disabled>Close duplicates</button>
 

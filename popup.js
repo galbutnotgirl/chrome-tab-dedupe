@@ -14,6 +14,9 @@ const selectAllBtn = document.getElementById('selectAll');
 const clearAllBtn = document.getElementById('clearAll');
 const relatedBox = document.getElementById('related');
 const scopeRow = document.getElementById('scopeRow');
+const viewsRow = document.querySelector('.views');
+const findInput = document.getElementById('find');
+const resultsList = document.getElementById('results');
 
 // The popup belongs to the browser window it was opened from, so this is the
 // window the "this window" scope means.
@@ -34,6 +37,9 @@ let clutter = [];
  * trap this whole view exists to avoid.
  */
 let shownIds = [];
+/** Find state: current results and the keyboard cursor within them. */
+let results = [];
+let cursor = 0;
 
 autoBox.checked = Boolean(settings.autoDedupe);
 autoBox.addEventListener('change', () => setSettings({ autoDedupe: autoBox.checked }));
@@ -48,8 +54,9 @@ function setPressed(selector, attr, value) {
   }
 }
 
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
+function plural(n, word, many) {
+  if (n === 1) return `${n} ${word}`;
+  return `${n} ${many || `${word}s`}`;
 }
 
 // --- duplicates view --------------------------------------------------------
@@ -213,22 +220,118 @@ function renderRelated(report) {
       block.append(ul);
     }
 
-    const act = document.createElement('button');
-    act.className = 'act';
-    act.disabled = group.ids.length === 0;
-    act.textContent = group.ids.length ? `Close ${plural(group.ids.length, 'tab')}` : 'Nothing to close';
-    act.addEventListener('click', async () => {
-      act.disabled = true;
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    // Grouping first: collapsing a trail into a named group keeps it, and is
+    // usually what you want before reaching for close.
+    const groupBtn = document.createElement('button');
+    groupBtn.className = 'act';
+    groupBtn.disabled = group.ids.length === 0;
+    groupBtn.textContent = 'Group';
+    groupBtn.title = 'Collapse these into a named tab group instead of closing them';
+    groupBtn.addEventListener('click', async () => {
+      groupBtn.disabled = true;
+      const res = await chrome.runtime.sendMessage({ type: 'groupIds', ids: group.ids });
+      groupBtn.textContent = res && res.grouped ? `Grouped as "${res.title}"` : 'Could not group';
+      if (res && res.grouped) setTimeout(() => window.close(), 900);
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'act';
+    closeBtn.disabled = group.ids.length === 0;
+    closeBtn.textContent = group.ids.length ? `Close ${plural(group.ids.length, 'tab')}` : 'Nothing to close';
+    closeBtn.addEventListener('click', async () => {
+      closeBtn.disabled = true;
       const res = await ask('closeIds', { ids: group.ids, what: `related: ${group.key}` });
       const n = res && res.count ? res.count : 0;
-      act.textContent = `Closed ${n}`;
+      closeBtn.textContent = `Closed ${n}`;
       await refresh();
     });
-    block.append(act);
+
+    actions.append(groupBtn, closeBtn);
+    block.append(actions);
 
     relatedBox.append(block);
   }
 }
+
+// --- find -------------------------------------------------------------------
+
+const searching = () => findInput.value.trim().length > 0;
+
+function renderResults(report) {
+  results = report.results;
+  cursor = Math.min(cursor, Math.max(results.length - 1, 0));
+
+  const total = results.reduce((n, r) => n + r.ids.length, 0);
+  summary.textContent = results.length
+    ? `${plural(results.length, 'match', 'matches')}${total > results.length ? ` · ${total} tabs` : ''}`
+    : `Nothing matches "${report.query}".`;
+  hint.textContent = results.length ? '↑↓ to move · Enter to open · Esc to clear' : '';
+
+  resultsList.replaceChildren();
+  results.forEach((item, index) => {
+    const li = document.createElement('li');
+    if (index === cursor) li.className = 'cursor';
+    if (item.active) li.classList.add('here');
+
+    const jump = document.createElement('button');
+    jump.className = 'jump';
+    jump.append(titleCell(item.title, item.host));
+    jump.addEventListener('click', () => jumpTo(item.id));
+    li.append(jump);
+
+    if (item.copies > 1) {
+      const copies = document.createElement('span');
+      copies.className = 'copies';
+      copies.textContent = `${item.copies}×`;
+      copies.title = `${item.copies} copies of this page`;
+      li.append(copies);
+    }
+    resultsList.append(li);
+  });
+
+  // Close every match, copies included — the fast way to clear a whole topic.
+  sweepBtn.hidden = results.length === 0;
+  sweepBtn.disabled = results.length === 0;
+  sweepBtn.textContent = total ? `Close ${plural(total, 'matching tab')}` : 'Nothing to close';
+}
+
+function moveCursor(delta) {
+  if (!results.length) return;
+  cursor = (cursor + delta + results.length) % results.length;
+  for (const [index, li] of [...resultsList.children].entries()) {
+    li.classList.toggle('cursor', index === cursor);
+  }
+  resultsList.children[cursor].scrollIntoView({ block: 'nearest' });
+}
+
+findInput.addEventListener('input', () => {
+  cursor = 0;
+  refresh();
+});
+
+findInput.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveCursor(1);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveCursor(-1);
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    if (results[cursor]) jumpTo(results[cursor].id);
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    if (searching()) {
+      findInput.value = '';
+      refresh();
+    } else {
+      window.close();
+    }
+  }
+});
 
 // --- shared -----------------------------------------------------------------
 
@@ -262,6 +365,23 @@ async function refresh() {
   const { lastClose } = await chrome.storage.session.get('lastClose');
   undoBtn.hidden = !(lastClose && lastClose.count);
   if (!undoBtn.hidden) undoBtn.textContent = `Undo (${lastClose.count})`;
+
+  const finding = searching();
+
+  // Search takes over the body of the popup while there's a query.
+  viewsRow.hidden = finding;
+  resultsList.hidden = !finding;
+  if (finding) {
+    scopeRow.hidden = true;
+    list.hidden = true;
+    relatedBox.hidden = true;
+    autoRow.hidden = true;
+    selectAllBtn.hidden = true;
+    clearAllBtn.hidden = true;
+    renderResults(await ask('find', { query: findInput.value.trim() }));
+    return;
+  }
+  sweepBtn.hidden = false;
 
   autoRow.hidden = view !== 'duplicates';
   if (view !== 'clutter') {
@@ -326,6 +446,19 @@ clearAllBtn.addEventListener('click', () => {
 sweepBtn.addEventListener('click', async () => {
   sweepBtn.disabled = true;
   let closed = 0;
+
+  if (searching()) {
+    const ids = results.flatMap((r) => r.ids);
+    const res = await ask('closeIds', { ids, what: `search: ${findInput.value.trim()}` });
+    closed = res && res.count ? res.count : 0;
+    summary.textContent = closed ? `Closed ${plural(closed, 'tab')}.` : 'Nothing closed.';
+    hint.textContent = '';
+    resultsList.replaceChildren();
+    sweepBtn.textContent = 'Done';
+    undoBtn.hidden = closed === 0;
+    undoBtn.textContent = `Undo (${closed})`;
+    return;
+  }
 
   if (view === 'duplicates') {
     const res = await ask('sweep');

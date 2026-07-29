@@ -45,7 +45,7 @@ FRAME_CSS = """
 
   /* Browser window mock. Deliberately generic — no Chrome branding, no site logos. */
   .win {
-    position: relative; width: 1050px; background: #fff; border-radius: 14px; overflow: hidden;
+    position: relative; width: 1090px; background: #fff; border-radius: 14px; overflow: hidden;
     box-shadow: 0 26px 64px rgba(22, 20, 46, 0.17), 0 2px 6px rgba(22, 20, 46, 0.07);
   }
   .chrome-top { background: #dee1e6; padding: 11px 12px 0; }
@@ -205,14 +205,23 @@ def write_popup_inner():
     <!-- The extension's own stylesheet, unmodified. -->
     <link rel="stylesheet" href="../popup.css" />
     <style>
+      /* Screenshot-only: pin the light palette so a listing image never depends on
+         the theme of whichever machine captured it. */
+      :root {{
+        color-scheme: light;
+        --fg: #1c1c1e; --muted: #6b6b70; --bg: #ffffff;
+        --card: #f4f4f6; --line: #e2e2e5; --accent: #8a37f4;
+      }}
       /* Only the scrollbar is suppressed, so the shot isn't a scrollbar photo. */
       body {{ overflow: hidden; }}
     </style>
   </head>
   <body>
+    <input class="find" type="text" placeholder="Search all tabs…" />
     <div class="views">
       <button class="seg" aria-pressed="true">Duplicates</button>
       <button class="seg" aria-pressed="false">Clutter</button>
+      <button class="seg" aria-pressed="false">Related</button>
     </div>
     <div class="scope">
       <button class="seg" aria-pressed="true">This window</button>
@@ -253,7 +262,7 @@ def write_screenshot_popup():
     /* Anchored to the toolbar, just under the extension icon. */
     .popup {
       position: absolute; top: 74px; right: 14px;
-      width: 316px; height: 436px; border: 0; border-radius: 12px; background: #fff;
+      width: 428px; height: 470px; border: 0; border-radius: 12px; background: #fff;
       box-shadow: 0 18px 44px rgba(22, 20, 46, 0.24), 0 0 0 1px rgba(22, 20, 46, 0.08);
     }
     """
@@ -393,6 +402,13 @@ def write_demo_options():
     src = (REPO_ROOT / "options.html").read_text()
     src = src.replace('href="options.css"', 'href="../options.css"')
     src = src.replace('src="icons/', 'src="../icons/')
+    # Screenshot-only light pin, for the same reason as the popup.
+    src = src.replace(
+        '</head>',
+        '<style>:root { color-scheme: light; --fg:#16171c; --fg-soft:#5f6373; --bg:#f6f6f9;'
+        ' --surface:#ffffff; --line:#e6e7ee; --line-soft:#eeeff4; --accent:#8a37f4;'
+        ' --track:#d6d8e2; }</style>\n  </head>',
+    )
     src = src.replace(
         '<script type="module" src="options.js"></script>',
         '<script src="chrome-shim.js"></script>\n'
