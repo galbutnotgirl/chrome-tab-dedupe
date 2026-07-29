@@ -227,7 +227,9 @@ else: never yank a tab out of its group.
 
 ## Settings
 
-Five groups, one line of plain English each. Open with right-click the icon → **Options**.
+Opens on **What it does** — the full feature list, both right-click menus, and the two shortcuts, so the
+extension explains itself without this README. Then five groups of settings, one line of plain English
+each. Open with right-click the icon → **Options**.
 
 | Group | Settings |
 |---|---|

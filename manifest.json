@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab De-Clutter",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Finds duplicate tabs, finished hand-off pages, and clutter \u2014 and clears them in one click.",
   "permissions": [
     "tabs",

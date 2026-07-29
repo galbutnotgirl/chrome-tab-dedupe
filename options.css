@@ -414,3 +414,67 @@ summary:hover {
   opacity: 0.4;
   pointer-events: none;
 }
+
+/* --- feature list ---------------------------------------------------------- */
+
+.features {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.features li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.features li:first-child {
+  border-top: 0;
+}
+
+.fname {
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.fdesc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-soft);
+  max-width: 60ch;
+}
+
+/* The menu and shortcut references: one line each, label and meaning side by side. */
+.features.compact li {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 14px;
+  padding: 7px 0;
+}
+
+.features.compact .fname {
+  flex: none;
+  min-width: 210px;
+}
+
+.features.compact .fdesc {
+  flex: 1;
+}
+
+@media (max-width: 720px) {
+  .features.compact li {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  font: 12px ui-monospace, Menlo, monospace;
+}

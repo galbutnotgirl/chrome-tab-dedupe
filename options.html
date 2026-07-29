@@ -19,7 +19,8 @@
 
     <div class="shell">
       <nav class="nav" id="nav">
-        <a href="#duplicates" class="current">Duplicates</a>
+        <a href="#about" class="current">What it does</a>
+        <a href="#duplicates">Duplicates</a>
         <a href="#matching">Same document</a>
         <a href="#finished">Finished</a>
         <a href="#cleanup">Cleanup</a>
@@ -27,6 +28,82 @@
       </nav>
 
       <main>
+        <section class="panel" id="about">
+          <h2>What it does</h2>
+          <p class="intro">
+            One place to see and clear every kind of tab pile-up. Nothing pinned, grouped, playing
+            audio, or currently open is ever closed — and every bulk close can be undone.
+          </p>
+
+          <ul class="features">
+            <li>
+              <span class="fname">Reuses the tab you already have</span>
+              <span class="fdesc">Open a page that's already open and the new tab closes — the original
+                comes to you, into the slot right of the tab you're on.</span>
+            </li>
+            <li>
+              <span class="fname">Knows a document by its identity</span>
+              <span class="fdesc">A link to slide 14 is the same deck you already have open. Same for a
+                Jira issue from a board, a Confluence page with a changed title, a PR's Files tab.</span>
+            </li>
+            <li>
+              <span class="fname">Finds any tab by typing</span>
+              <span class="fdesc">Search box at the top of the popup. Arrow keys to move, Enter to open.
+                Copies of one page fold into a single result.</span>
+            </li>
+            <li>
+              <span class="fname">Clears finished pages</span>
+              <span class="fdesc">Slack links that already opened the app, "you can close this tab"
+                connector and sign-in pages, Meet calls that ended. Listed together, gone in one click.</span>
+            </li>
+            <li>
+              <span class="fname">Proposes what you're done with</span>
+              <span class="fdesc">The Clutter tab ranks tabs and says why for each one. Nothing closes
+                until you tick it.</span>
+            </li>
+            <li>
+              <span class="fname">Closes a whole research trail</span>
+              <span class="fdesc">Right-click a tab → Review related tabs. It follows which tab opened
+                which, so a search and everything it led to closes as one thing.</span>
+            </li>
+            <li>
+              <span class="fname">Counts what's worth clearing</span>
+              <span class="fdesc">A live badge on the icon, with a tooltip that splits the number.</span>
+            </li>
+            <li>
+              <span class="fname">Merges every window into one</span>
+              <span class="fdesc">From the popup footer or the icon's right-click menu.</span>
+            </li>
+          </ul>
+
+          <h3>Right-click any tab</h3>
+          <ul class="features compact">
+            <li><span class="fname">Review related tabs…</span><span class="fdesc">See every category before anything closes</span></li>
+            <li><span class="fname">Close related tabs</span><span class="fdesc">The whole trail it belongs to</span></li>
+            <li><span class="fname">Close other tabs from this site</span><span class="fdesc">This tab stays</span></li>
+            <li><span class="fname">Close duplicate tabs</span><span class="fdesc">This window</span></li>
+          </ul>
+
+          <h3>Right-click the toolbar icon</h3>
+          <ul class="features compact">
+            <li><span class="fname">Close duplicates</span><span class="fdesc">This window, or all windows</span></li>
+            <li><span class="fname">Close finished pages</span><span class="fdesc">Every hand-off leftover at once</span></li>
+            <li><span class="fname">Merge all windows into this one</span><span class="fdesc">Grouped tabs stay put</span></li>
+            <li><span class="fname">Undo close</span><span class="fdesc">Reopens the last batch</span></li>
+          </ul>
+
+          <h3>Shortcuts</h3>
+          <ul class="features compact">
+            <li><span class="fname"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span><span class="fdesc">Close duplicate tabs now</span></li>
+            <li><span class="fname"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span><span class="fdesc">Let the next tab through, even if it's a duplicate</span></li>
+          </ul>
+
+          <p class="note">
+            No host permissions and no content scripts: none of this extension's code ever runs on a web
+            page, and nothing leaves your browser.
+          </p>
+        </section>
+
         <section class="panel" id="duplicates">
           <h2>Duplicates</h2>
 
