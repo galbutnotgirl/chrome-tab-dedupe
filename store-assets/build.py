@@ -255,7 +255,7 @@ def write_screenshot_popup():
         TABS_DUPES,
         "docs.google.com/document/d/&hellip;/edit#heading=h.k2p1",
         extra_css="height: 452px;",
-        overlay='<iframe class="popup" src="demo-popup-inner.html" title="Tab Dedupe popup"></iframe>',
+        overlay='<iframe class="popup" src="demo-popup-inner.html" title="Tab De-Clutter popup"></iframe>',
       )}
     </div>"""
     css = """
@@ -340,7 +340,7 @@ def write_screenshot_samedoc():
     chips = "".join(f"<span>{c}</span>" for c in RULE_CHIPS)
     body = f"""    <div class="head">
       <h1>Same document. Three different URLs.</h1>
-      <p class="sub">A link to slide 14 isn't a different deck. Tab Dedupe reduces a URL to the
+      <p class="sub">A link to slide 14 isn't a different deck. Tab De-Clutter reduces a URL to the
       thing <b>you</b> would call the document, then compares that.</p>
     </div>
     <div class="stage">
@@ -425,7 +425,7 @@ def write_screenshot_options():
     </div>
     <div class="stage">
       <div class="frame">
-        <iframe src="demo-options.html" title="Tab Dedupe settings"></iframe>
+        <iframe src="demo-options.html" title="Tab De-Clutter settings"></iframe>
       </div>
     </div>"""
     css = """
@@ -449,7 +449,7 @@ def write_promo_small():
     body = """    <div class="tile">
       <span class="plate"><img src="icon-300.png" alt="" /></span>
       <div>
-        <div class="name">Tab Dedupe</div>
+        <div class="name">Tab De-Clutter</div>
         <div class="tag">Opens the tab you already have</div>
       </div>
     </div>"""
@@ -481,7 +481,7 @@ def write_promo_marquee():
       <div class="left">
         <span class="plate"><img src="icon-300.png" alt="" /></span>
         <div>
-          <div class="name">Tab Dedupe</div>
+          <div class="name">Tab De-Clutter</div>
           <div class="tag">Opens the tab you already have</div>
         </div>
       </div>

@@ -7,7 +7,7 @@ Paste-ready. Field names match the Developer Dashboard.
 ## Name (max 45 chars)
 
 ```
-Tab Dedupe
+Tab De-Clutter
 ```
 10 characters. No trademark in the name, so no naming-policy exposure.
 
@@ -27,11 +27,11 @@ Opens the tab you already have instead of a second copy — and moves it next to
 ```
 You already have that page open. Somewhere. Probably three windows to the left.
 
-Tab Dedupe notices, closes the copy you were about to open, and brings the tab you already had to you — into the slot immediately right of the tab you're on. No second copy, no hunting the tab strip, and no losing your scroll position or unsaved edits.
+Tab De-Clutter notices, closes the copy you were about to open, and brings the tab you already had to you — into the slot immediately right of the tab you're on. No second copy, no hunting the tab strip, and no losing your scroll position or unsaved edits.
 
 SAME DOCUMENT, DIFFERENT URL
 
-A link to slide 14 is not a different deck. That is the part most duplicate-tab tools get wrong, because they compare URLs as text. Tab Dedupe reduces a URL to the thing you would call the document, then compares that.
+A link to slide 14 is not a different deck. That is the part most duplicate-tab tools get wrong, because they compare URLs as text. Tab De-Clutter reduces a URL to the thing you would call the document, then compares that.
 
 It ignores the part of an address that only says where you are: which slide, which sheet tab, which heading, edit versus preview mode, share parameters, tracking parameters, a Confluence page title, a pull request's Files tab. Rules ship for Google Docs, Sheets, Slides, Drive, Jira, Confluence, Salesforce, Figma, GitHub, Notion and YouTube, and every rule has its own switch. Everything else gets sensible generic matching.
 
@@ -62,7 +62,7 @@ PRIVACY
 - Tab addresses are compared in memory and discarded. Nothing is written to disk, and nothing leaves your browser.
 - Your settings sync through your own Chrome account. That is the only thing stored.
 
-Open source: https://github.com/galbutnotgirl/chrome-tab-dedupe
+Open source: https://github.com/galbutnotgirl/chrome-tab-declutter
 ```
 
 ---
@@ -132,7 +132,7 @@ certification boxes:
 **Privacy policy URL:** optional, since nothing is collected — but supplying one helps review:
 
 ```
-https://github.com/galbutnotgirl/chrome-tab-dedupe/blob/main/PRIVACY_POLICY.md
+https://github.com/galbutnotgirl/chrome-tab-declutter/blob/main/PRIVACY_POLICY.md
 ```
 
 ---

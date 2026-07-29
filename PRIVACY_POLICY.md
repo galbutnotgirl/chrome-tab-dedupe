@@ -1,4 +1,4 @@
-# Privacy Policy — Tab Dedupe
+# Privacy Policy — Tab De-Clutter
 
 Last updated: 2026-07-28
 

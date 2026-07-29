@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Tab Dedupe — Settings</title>
+    <title>Tab De-Clutter — Settings</title>
     <link rel="stylesheet" href="../options.css" />
   <style>:root { color-scheme: light; --fg:#16171c; --fg-soft:#5f6373; --bg:#f6f6f9; --surface:#ffffff; --line:#e6e7ee; --line-soft:#eeeff4; --accent:#8a37f4; --track:#d6d8e2; }</style>
   </head>
@@ -11,7 +11,7 @@
       <div class="brand">
         <img src="../icons/icon48.png" alt="" width="30" height="30" />
         <div>
-          <h1>Tab Dedupe</h1>
+          <h1>Tab De-Clutter</h1>
           <p>Settings</p>
         </div>
       </div>
@@ -22,6 +22,7 @@
       <nav class="nav" id="nav">
         <a href="#duplicates" class="current">Duplicates</a>
         <a href="#matching">Same document</a>
+        <a href="#finished">Finished</a>
         <a href="#cleanup">Cleanup</a>
         <a href="#advanced">Advanced</a>
       </nav>
@@ -56,6 +57,14 @@
 
           <label class="row">
             <div class="text">
+              <span class="label">Show the count on the icon</span>
+              <span class="desc">A live badge of how many duplicates you have right now.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="liveBadge" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
               <span class="label">Twice in a row means I meant it</span>
               <span class="desc">Repeat within 8 seconds and you get a real second copy.</span>
             </div>
@@ -82,6 +91,63 @@
             <summary><span id="rulesCount">Per-site rules</span></summary>
             <div class="rules" id="rules"></div>
           </details>
+        </section>
+
+        <section class="panel" id="finished">
+          <h2>Finished pages</h2>
+          <p class="intro">
+            Some tabs are done the moment they load — a Slack link that opened the app, a
+            <em>"you can close this tab"</em> connector page, a Meet call that ended. The popup's
+            <strong>Finished</strong> tab lists them and clears the lot in one click.
+          </p>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Slack links</span>
+              <span class="desc">Permalinks left behind after Slack opened the desktop app.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="finishedSlack" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Hand-off and sign-in pages</span>
+              <span class="desc">Pages that say their job is done — connectors, OAuth callbacks.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="finishedHandoff" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Ended Meet calls</span>
+              <span class="desc">Silent, unfocused Meet tabs. A call with anyone talking never counts.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="finishedMeet" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Call it ended after</span>
+              <span class="desc">Minutes of silence.</span>
+            </div>
+            <input type="number" data-setting="meetStaleMinutes" data-type="number" min="5" max="240" step="5" />
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Close them automatically</span>
+              <span class="desc">No prompt. Undo still works from the popup.</span>
+            </div>
+            <span class="switch"><input type="checkbox" data-setting="autoCloseFinished" /><span></span></span>
+          </label>
+
+          <label class="row">
+            <div class="text">
+              <span class="label">Wait before auto-closing</span>
+              <span class="desc">Seconds, so a hand-off never races the app it's opening.</span>
+            </div>
+            <input type="number" data-setting="autoCloseAfterSeconds" data-type="number" min="3" max="120" step="1" />
+          </label>
         </section>
 
         <section class="panel" id="cleanup">

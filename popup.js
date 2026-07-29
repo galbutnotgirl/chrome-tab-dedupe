@@ -1,7 +1,7 @@
 import { getSettings, setSettings } from './lib/settings.js';
 
 /** Duplicates group by page so the list is short; clutter is per tab, so show more. */
-const MAX_ROWS = { duplicates: 6, clutter: 12 };
+const MAX_ROWS = { duplicates: 6, clutter: 12, finished: 12 };
 
 const summary = document.getElementById('summary');
 const list = document.getElementById('list');
@@ -17,6 +17,7 @@ const scopeRow = document.getElementById('scopeRow');
 const viewsRow = document.querySelector('.views');
 const findInput = document.getElementById('find');
 const resultsList = document.getElementById('results');
+const mergeBtn = document.getElementById('merge');
 
 // The popup belongs to the browser window it was opened from, so this is the
 // window the "this window" scope means.
@@ -40,6 +41,7 @@ let shownIds = [];
 /** Find state: current results and the keyboard cursor within them. */
 let results = [];
 let cursor = 0;
+let finishedItems = [];
 
 autoBox.checked = Boolean(settings.autoDedupe);
 autoBox.addEventListener('change', () => setSettings({ autoDedupe: autoBox.checked }));
@@ -153,6 +155,70 @@ function renderClutter(report) {
   syncClutterButton();
 }
 
+// --- finished view ----------------------------------------------------------
+
+const CATEGORY_ORDER = ['handoff', 'slack', 'meet'];
+/** [singular, plural] — brand names keep their capitals in both. */
+const CATEGORY_NAME = {
+  handoff: ['hand-off page', 'hand-off pages'],
+  slack: ['Slack link', 'Slack links'],
+  meet: ['ended Meet call', 'ended Meet calls'],
+};
+
+function renderFinished(report) {
+  const items = report.items;
+  finishedItems = items;
+
+  if (!items.length) {
+    summary.textContent = `Nothing finished in ${plural(report.scanned, 'tab')}.`;
+    hint.textContent = 'Slack links, "you can close this" pages and ended Meet calls show up here.';
+    list.replaceChildren();
+    sweepBtn.disabled = true;
+    sweepBtn.textContent = 'Nothing to close';
+    return;
+  }
+
+  // Counts per category, so the header says what the number is made of.
+  const counts = new Map();
+  for (const item of items) counts.set(item.category, (counts.get(item.category) || 0) + 1);
+  const breakdown = CATEGORY_ORDER.filter((c) => counts.has(c))
+    .map((c) => {
+      const n = counts.get(c);
+      return `${n} ${CATEGORY_NAME[c][n === 1 ? 0 : 1]}`;
+    })
+    .join(' · ');
+
+  summary.textContent = `${plural(items.length, 'tab')} already done with`;
+  hint.textContent = breakdown;
+  sweepBtn.disabled = false;
+  sweepBtn.textContent = `Close all ${items.length}`;
+
+  list.replaceChildren();
+  for (const item of items.slice(0, MAX_ROWS.finished)) {
+    const li = document.createElement('li');
+    const jump = document.createElement('button');
+    jump.className = 'jump';
+    jump.append(titleCell(item.title, item.label));
+    jump.title = 'Go to this tab';
+    jump.addEventListener('click', () => jumpTo(item.id));
+
+    // Per-row close, for when you want one gone but not the rest.
+    const one = document.createElement('button');
+    one.className = 'link';
+    one.textContent = '✕';
+    one.title = 'Close just this tab';
+    one.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      await ask('closeIds', { ids: [item.id], what: 'finished page' });
+      await refresh();
+    });
+
+    li.append(jump, one);
+    list.append(li);
+  }
+  appendOverflow(items.length, MAX_ROWS.finished);
+}
+
 // --- related view -----------------------------------------------------------
 
 const MAX_GROUP_ROWS = 4;
@@ -220,23 +286,6 @@ function renderRelated(report) {
       block.append(ul);
     }
 
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-
-    // Grouping first: collapsing a trail into a named group keeps it, and is
-    // usually what you want before reaching for close.
-    const groupBtn = document.createElement('button');
-    groupBtn.className = 'act';
-    groupBtn.disabled = group.ids.length === 0;
-    groupBtn.textContent = 'Group';
-    groupBtn.title = 'Collapse these into a named tab group instead of closing them';
-    groupBtn.addEventListener('click', async () => {
-      groupBtn.disabled = true;
-      const res = await chrome.runtime.sendMessage({ type: 'groupIds', ids: group.ids });
-      groupBtn.textContent = res && res.grouped ? `Grouped as "${res.title}"` : 'Could not group';
-      if (res && res.grouped) setTimeout(() => window.close(), 900);
-    });
-
     const closeBtn = document.createElement('button');
     closeBtn.className = 'act';
     closeBtn.disabled = group.ids.length === 0;
@@ -248,9 +297,7 @@ function renderRelated(report) {
       closeBtn.textContent = `Closed ${n}`;
       await refresh();
     });
-
-    actions.append(groupBtn, closeBtn);
-    block.append(actions);
+    block.append(closeBtn);
 
     relatedBox.append(block);
   }
@@ -362,6 +409,11 @@ function appendOverflow(total, max) {
 }
 
 async function refresh() {
+  // Only worth offering when there is actually something to merge.
+  const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+  mergeBtn.hidden = windows.length < 2;
+  if (!mergeBtn.hidden) mergeBtn.textContent = `Merge ${windows.length} windows`;
+
   const { lastClose } = await chrome.storage.session.get('lastClose');
   undoBtn.hidden = !(lastClose && lastClose.count);
   if (!undoBtn.hidden) undoBtn.textContent = `Undo (${lastClose.count})`;
@@ -389,14 +441,16 @@ async function refresh() {
     clearAllBtn.hidden = true;
   }
 
-  // A trail follows openers across windows, so a window scope would only mislead.
-  scopeRow.hidden = view === 'related';
+  // A trail follows openers across windows, and a finished page is finished in any
+  // window — a scope switch would only mislead in both views.
+  scopeRow.hidden = view === 'related' || view === 'finished';
   list.hidden = view === 'related';
   relatedBox.hidden = view !== 'related';
   sweepBtn.hidden = view === 'related';
 
   if (view === 'duplicates') renderDuplicates(await ask('report'));
   else if (view === 'clutter') renderClutter(await ask('clutter'));
+  else if (view === 'finished') renderFinished(await ask('finished'));
   else renderRelated(await ask('relatedReport', { tabId: await seedTabId() }));
 }
 
@@ -460,7 +514,10 @@ sweepBtn.addEventListener('click', async () => {
     return;
   }
 
-  if (view === 'duplicates') {
+  if (view === 'finished') {
+    const res = await chrome.runtime.sendMessage({ type: 'closeFinished' });
+    closed = res && res.count ? res.count : 0;
+  } else if (view === 'duplicates') {
     const res = await ask('sweep');
     closed = res && res.count ? res.count : 0;
   } else {
@@ -483,6 +540,21 @@ undoBtn.addEventListener('click', async () => {
   summary.textContent = n ? `Restored ${plural(n, 'tab')}.` : 'Nothing left to restore.';
   undoBtn.hidden = true;
   await refresh();
+});
+
+mergeBtn.addEventListener('click', async () => {
+  mergeBtn.disabled = true;
+  const res = await chrome.runtime.sendMessage({ type: 'mergeWindows', windowId: win.id });
+  const moved = res && res.merged ? res.merged : 0;
+  summary.textContent = moved
+    ? `Merged ${plural(moved, 'tab')} into this window.${res.skipped ? ` ${res.skipped} left grouped.` : ''}`
+    : 'Nothing to merge.';
+  hint.textContent = '';
+  list.replaceChildren();
+  resultsList.replaceChildren();
+  relatedBox.replaceChildren();
+  sweepBtn.hidden = true;
+  mergeBtn.hidden = true;
 });
 
 document.getElementById('arm').addEventListener('click', async () => {

@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { scoreMatch, searchTabs, readableUrl } from '../lib/search.js';
-import { GROUP_COLORS, colorForTitle, groupableTabs, partitionByWindow, groupTitle } from '../lib/grouping.js';
 
 const NOW = 1_800_000_000_000;
 const tab = (over = {}) => ({
@@ -100,70 +99,4 @@ test('searchTabs with no query returns nothing rather than everything', () => {
   assert.deepEqual(searchTabs('', [tab()]), []);
   assert.deepEqual(searchTabs('x', []), []);
   assert.deepEqual(searchTabs('x', null), []);
-});
-
-// --- grouping ---------------------------------------------------------------
-
-test('colorForTitle is stable, never grey, and always a real Chrome color', () => {
-  const a = colorForTitle('Kokkari');
-  assert.equal(a, colorForTitle('Kokkari'), 'same name, same color tomorrow');
-  assert.ok(GROUP_COLORS.includes(a));
-  assert.notEqual(a, 'grey');
-  assert.ok(GROUP_COLORS.includes(colorForTitle('')));
-});
-
-test('pinned tabs cannot be grouped and are reported as skipped', () => {
-  const tabs = [tab({ id: 1 }), tab({ id: 2, pinned: true }), tab({ id: 3 })];
-  const { eligible, skipped } = groupableTabs(tabs, [1, 2, 3]);
-  assert.deepEqual(eligible.map((t) => t.id), [1, 3]);
-  assert.deepEqual(skipped, [2]);
-});
-
-test('grouping ignores ids that are not in the tab list', () => {
-  const { eligible } = groupableTabs([tab({ id: 1 })], [1, 999]);
-  assert.deepEqual(eligible.map((t) => t.id), [1]);
-});
-
-test('a trail spanning windows becomes one group per window', () => {
-  const tabs = [
-    tab({ id: 1, windowId: 10 }),
-    tab({ id: 2, windowId: 10 }),
-    tab({ id: 3, windowId: 20 }),
-  ];
-  const parts = partitionByWindow(tabs);
-  assert.equal(parts.size, 2);
-  assert.deepEqual(parts.get(10), [1, 2]);
-  assert.deepEqual(parts.get(20), [3]);
-});
-
-test('group title prefers a shared site, minus the boilerplate suffix', () => {
-  const tabs = [
-    tab({ url: 'https://www.kokkari.com/menu', title: 'Menu — Kokkari Estiatorio' }),
-    tab({ url: 'https://kokkari.com/book', title: 'Reservations — Kokkari Estiatorio' }),
-  ];
-  assert.equal(groupTitle(tabs), 'kokkari');
-});
-
-test('group title falls back to the first tab, with the site suffix trimmed', () => {
-  const tabs = [
-    tab({ url: 'https://a.com/x', title: 'Greek places to try — Notes' }),
-    tab({ url: 'https://b.com/y', title: 'Something else' }),
-  ];
-  assert.equal(groupTitle(tabs), 'Greek places to try');
-});
-
-test('group title truncates rather than overflowing the tab strip', () => {
-  const tabs = [
-    tab({ url: 'https://a.com/x', title: 'An extremely long research trail title that keeps going' }),
-    tab({ url: 'https://b.com/y', title: 'Other' }),
-  ];
-  const title = groupTitle(tabs);
-  assert.ok(title.length <= 22, title);
-  assert.ok(title.endsWith('…'));
-});
-
-test('group title copes with junk input', () => {
-  assert.equal(groupTitle([]), 'Tabs');
-  assert.equal(groupTitle(null), 'Tabs');
-  assert.equal(groupTitle([tab({ url: 'not a url', title: '' })]), 'Tabs');
 });

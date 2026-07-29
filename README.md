@@ -1,4 +1,4 @@
-# Tab Dedupe
+# Tab De-Clutter
 
 A local Chrome extension (MV3). What it does:
 
@@ -8,26 +8,33 @@ A local Chrome extension (MV3). What it does:
 4. **Close a whole excursion.** Right-click any tab → **Close related tabs** and the research trail it belongs to goes with it.
 5. **Review the clutter.** The popup's **Clutter** tab ranks tabs you're probably done with, says why, and lets you tick what closes.
 6. **Find any tab by typing.** The search box at the top of the popup ranks every open tab, folds duplicate copies into one row, and jumps you there with Enter.
-7. **Group instead of closing.** Collapse a research trail into a named, colored tab group you can reopen later.
+7. **Clear finished pages.** Slack links that already opened the app, "you can close this tab" connector pages, ended Meet calls — listed together, gone in one click.
+8. **See it without asking.** A live badge on the icon counts what's worth clearing right now.
+9. **Merge every window into one.**
 
 ```
-┌─────────────────────────────────┐
-│ [ This window ] [ All windows ] │
-│ 7 duplicate tabs — 4 pages      │
-│ Q3 Planning — draft…       3×   │
-│ docs.google.com                 │
-│ ACME-142: Migration plan…  2×   │
-│ example.atlassian.net           │
-│ ─────────────────────────────── │
-│    Close 7 duplicate tabs       │
-│ ☑ Auto-close new duplicate tabs │
-│ Let the next tab through | ⚙︎    │
-└─────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│ Search all tabs…                         │
+│ [Duplicates] [Clutter] [Finished] [Rel.] │
+│ 7 tabs already done with                 │
+│ Connected                             ✕  │
+│   Hand-off page — its job is done        │
+│ Slack | #gso-enablement               ✕  │
+│   Slack opened the desktop app           │
+│ Meet — abc-defg-hij                   ✕  │
+│   Meet call — silent for over 30m        │
+│ ──────────────────────────────────────── │
+│              Close all 7                 │
+│ 3 hand-off pages · 3 Slack links · 1 …   │
+│ Let the next tab through | Merge | ⚙︎     │
+└──────────────────────────────────────────┘
 ```
 
 Three ways to sweep, same engine: the popup button, right-click the icon → **Close duplicate tabs in this window / all windows**, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> for an instant no-popup sweep (badge flashes the count).
 
-No store listing, no third party, no analytics. Permissions are `tabs`, `tabGroups`, `storage`, `contextMenus`, `sessions` — nothing leaves the browser.
+No store listing, no third party, no analytics. Permissions are `tabs`, `tabGroups`, `storage`,
+`contextMenus`, `sessions`, `alarms` — and **no host permissions and no content scripts**, so no code of
+this extension's ever runs on a web page. Nothing leaves the browser.
 
 ## Install
 
@@ -58,20 +65,35 @@ The search box at the top of the popup searches every tab in every window. Type,
 Chrome has its own tab search (⇧⌘A). This one exists because it knows about document identity and can act
 on what it finds.
 
-## Group instead of closing
+## Finished pages
 
-Closing a research trail is one answer. Collapsing it into a named tab group is usually the better one:
+Some tabs are done the moment they load. A Slack permalink hands off to the desktop app and the browser
+tab just sits there. A connector page says *"Connected — you can close this tab"* and then doesn't. An
+OAuth callback lands and is instantly useless. A Meet call ended an hour ago. These aren't stale-ish or
+probably-unwanted — they're **finished**, and nothing ever closes them.
 
-- Right-click a tab → **Group related tabs**, or use the **Group** button on any category in the
-  **Related** view.
-- The group gets a short name — the shared site if there is one (`kokkari`), otherwise the first tab's
-  title minus the boilerplate suffix sites append to everything — and a color derived from that name, so
-  regrouping the same trail tomorrow looks the same.
-- Groups arrive **collapsed**, which is the point: a trail becomes one chip in the tab strip.
-- Pinned tabs can't be grouped (Chrome doesn't allow it) and are reported as skipped. A trail spanning
-  windows becomes one identically-named group per window rather than an error.
+The popup's **Finished** tab lists them with what each one is, and clears the lot with one button. Each row
+also has its own `✕`, and every title jumps you to the tab first if you want to look.
 
-## Same document, different URL
+| Category | What counts | Default |
+|---|---|---|
+| **Slack links** | `*.slack.com/archives/*` and `/team/*` — the pages left behind after the hand-off. **Never** `app.slack.com`, which is the web client itself | on |
+| **Hand-off and sign-in pages** | Pages whose own title says the job is done (`Connected`, `You can close this tab`, `Authentication complete`), plus known dead-end URLs: the Claude desktop connector, Google OAuth approval, Zoom launch, `/oauth/callback` | on |
+| **Ended Meet calls** | A `meet.google.com/abc-defg-hij` tab that is silent, unfocused, unpinned and untouched for 30 minutes. Anyone talking keeps it audible, so a live call never qualifies | on |
+
+**No host permissions for any of it.** Detection uses `tab.url` and `tab.title`, which the `tabs`
+permission already provides — a content script would have meant asking to read and modify pages on Slack,
+Google, Zoom and everywhere else, which is a far bigger ask than the job needs.
+
+Title matching is deliberately narrow: the title has to be **short** (under 60 characters) as well as
+matching, so a long article that happens to contain the word "success" is never mistaken for a callback
+page.
+
+**Auto-close is available and off by default.** Turn it on and a timer clears finished pages once they've
+been finished for a few seconds — the grace period exists so a hand-off page never gets closed while the
+app it's opening is still starting. Every auto-close goes through the same undo trail as everything else.
+
+## Same document, different URL## Same document, different URL
 
 This is the interesting part. A Slides link carrying `#slide=id.g12` is the same deck as the copy you already have open on slide 1 — a plain string compare misses it. So URLs get reduced to the thing a human would call the document, with view state thrown away:
 
@@ -95,12 +117,11 @@ Each rule has its own checkbox in Options. Adding one is a single entry in `RULE
 
 ## Close related tabs
 
-Right-click any tab. Five items:
+Right-click any tab. Four items:
 
 | Item | What it does |
 |---|---|
 | **Review related tabs…** | Opens the popup's **Related** view: every category, named and listed, before anything closes |
-| **Group related tabs** | Collapses the trail into a named tab group instead of closing it |
 | **Close related tabs** | The whole excursion that tab belongs to — the tab it was opened from, and everything opened from those |
 | **Close other tabs from this site** | Every other tab on the same host. The clicked tab stays |
 | **Close duplicate tabs** | Same sweep as the toolbar button |
@@ -193,14 +214,26 @@ Chrome exposes no way for an extension to see modifier keys held in the address 
 
 One wrinkle worth knowing: if the tab you're on is *inside* a group and the existing copy isn't, moving it in next door means Chrome adopts it into that group. Usually what you want; if not, uncheck "move the existing tab" for that workflow.
 
+## The badge, and merging windows
+
+The toolbar icon carries a **live count of what's worth clearing** — duplicates plus finished pages —
+recomputed on tab changes and debounced, so opening a window doesn't recount fifty times. The tooltip
+splits it (`3 duplicates · 2 finished pages`). Turn it off in Settings if you'd rather not see a number.
+
+**Merge windows** appears in the popup footer only when you have more than one window, and on the icon's
+right-click menu. It pulls every other window's tabs into the current one, re-pinning anything that was
+pinned. Tabs in a tab group stay where they are and are reported, on the same principle as everywhere
+else: never yank a tab out of its group.
+
 ## Settings
 
-Four groups, one line of plain English each. Open with right-click the icon → **Options**.
+Five groups, one line of plain English each. Open with right-click the icon → **Options**.
 
 | Group | Settings |
 |---|---|
-| **Duplicates** | Reuse the tab I already have · Bring it next to me · Search every window · Twice in a row means I meant it |
+| **Duplicates** | Reuse the tab I already have · Bring it next to me · Search every window · Show the count on the icon · Twice in a row means I meant it |
 | **Same document** | Recognize documents by ID, plus a per-site list you can switch off one site at a time |
+| **Finished** | Slack links · Hand-off and sign-in pages · Ended Meet calls · Call it ended after · Close them automatically · Wait before auto-closing |
 | **Cleanup** | How much to suggest · Count as idle after · Tabs I'm usually done with · Start a new trail after |
 | **Advanced** | Don't move grouped tabs · Ignore URL query strings · Never touch these sites · Keyboard shortcuts |
 
@@ -210,7 +243,7 @@ closes duplicates, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> lets the next ta
 
 ## Troubleshooting
 
-Open the service worker console: `chrome://extensions` → the Tab Dedupe card → **service worker**. Every decision logs with a `[TabDedupe]` prefix. Then open a duplicate and read what it says.
+Open the service worker console: `chrome://extensions` → the Tab De-Clutter card → **service worker**. Every decision logs with a `[TabDeClutter]` prefix. Then open a duplicate and read what it says.
 
 | What you see | What it means |
 |---|---|
@@ -248,7 +281,7 @@ npm test
 
 61 tests, all pure (no `chrome.*`), so they run straight in node: URL keying in `lib/normalize.js`, and the
 tab-lifecycle decisions in `lib/decide.js` — which tab counts as still-new, which tab is the anchor, and
-where the existing tab lands. After editing any file, hit **Reload** on the card in `chrome://extensions`. Service worker logs: click **service worker** on that card; everything is prefixed `[TabDedupe]`.
+where the existing tab lands. After editing any file, hit **Reload** on the card in `chrome://extensions`. Service worker logs: click **service worker** on that card; everything is prefixed `[TabDeClutter]`.
 
 Layout:
 
@@ -261,7 +294,7 @@ lib/cluster.js         related-tab lineage, hub + time-gap guards (pure, tested)
 lib/staleness.js       clutter scoring with human-readable reasons (pure, tested)
 lib/fuzzy.js           loose phrase matching for user rules (pure, tested)
 lib/search.js          tiered tab-search ranking + copy folding (pure, tested)
-lib/grouping.js        group names, colors, and what may be grouped (pure, tested)
+lib/sites.js           finished-page recognizers: Slack, hand-offs, Meet (pure, tested)
 lib/settings.js        defaults + chrome.storage.sync wrapper
 popup.html/.css/.js    toolbar popup: what's duplicated + one-click close
 options.html/.css/.js  settings UI, rule checkboxes generated from RULES

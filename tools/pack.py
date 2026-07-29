@@ -5,7 +5,7 @@ Includes only what Chrome loads. Development files — tests, generators, store
 artwork, git — are left out, both to keep the package small and to avoid a
 reviewer asking what a Python file is doing in a browser extension.
 
-    python3 tools/pack.py            # writes tab-dedupe-<version>.zip
+    python3 tools/pack.py            # writes tab-declutter-<version>.zip
 """
 
 import json
@@ -21,7 +21,7 @@ INCLUDE_DIRS = ["lib", "icons"]
 
 def main():
     version = json.loads((REPO_ROOT / "manifest.json").read_text())["version"]
-    out = REPO_ROOT / f"tab-dedupe-{version}.zip"
+    out = REPO_ROOT / f"tab-declutter-{version}.zip"
 
     members = []
     for name in INCLUDE_FILES:

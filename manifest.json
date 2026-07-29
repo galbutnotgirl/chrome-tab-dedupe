@@ -1,21 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Tab Dedupe",
-  "version": "1.5.0",
-  "description": "Opens the tab you already have instead of a second copy \u2014 and moves it next to the tab you're on.",
+  "name": "Tab De-Clutter",
+  "version": "2.0.0",
+  "description": "Finds duplicate tabs, finished hand-off pages, and clutter \u2014 and clears them in one click.",
   "permissions": [
     "tabs",
     "tabGroups",
     "storage",
     "contextMenus",
-    "sessions"
+    "sessions",
+    "alarms"
   ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Tab Dedupe",
+    "default_title": "Tab De-Clutter",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -33,7 +34,7 @@
   "options_page": "options.html",
   "commands": {
     "_execute_action": {
-      "description": "Open Tab Dedupe"
+      "description": "Open Tab De-Clutter"
     },
     "sweep-now": {
       "suggested_key": {

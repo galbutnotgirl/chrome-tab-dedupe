@@ -4,9 +4,9 @@ import { stillPending, chooseAnchorId, targetIndexFor, shouldMove } from './lib/
 import { relatedCluster, sameHostCluster } from './lib/cluster.js';
 import { suggestClosures } from './lib/staleness.js';
 import { searchTabs } from './lib/search.js';
-import { colorForTitle, groupableTabs, partitionByWindow, groupTitle } from './lib/grouping.js';
+import { finishedTabs } from './lib/sites.js';
 
-const LOG = '[TabDedupe]';
+const LOG = '[TabDeClutter]';
 
 /**
  * Per-tab intel: when it was opened, which tab opened it, how many times you've
@@ -303,6 +303,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 
   const url = tab.pendingUrl || tab.url;
   if (url) maybeDedupe(tab.id, url);
+  scheduleBadge();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -321,6 +322,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+// A tab navigating elsewhere changes the duplicate picture even when it was never
+// a candidate for dedupe itself.
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+  if (changeInfo.url) scheduleBadge();
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   pending.delete(tabId);
   busy.delete(tabId);
@@ -329,6 +336,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   mutateIntel((intel) => {
     delete intel[tabId];
   });
+  scheduleBadge();
 });
 
 /** Keeper wins on: pinned, then active, then grouped, then playing audio, then leftmost. */
@@ -413,10 +421,123 @@ export async function closeDuplicates(opts = {}) {
   return doomed.length;
 }
 
+/**
+ * The badge has two jobs: a standing count of duplicates you currently have, and
+ * brief confirmations after an action. Transient messages win for a few seconds,
+ * then the standing count comes back — never a stale number left behind.
+ */
+const BADGE_COLOR = '#8A37F4';
+const BADGE_DEBOUNCE_MS = 1200;
+let badgeTimer = null;
+
+async function refreshBadge() {
+  const settings = await getSettings();
+  if (!settings.liveBadge) {
+    chrome.action.setBadgeText({ text: '' });
+    chrome.action.setTitle({ title: 'Tab De-Clutter' });
+    return 0;
+  }
+
+  const tabs = await chrome.tabs.query({ windowType: 'normal' });
+  const groups = await collectDuplicates(settings, { allWindows: true });
+  const dupes = groups.reduce((n, g) => n + g.doomed.length, 0);
+  const done = finishedTabs(tabs, settings, Date.now()).length;
+  const count = dupes + done;
+
+  chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
+  chrome.action.setBadgeText({ text: count ? String(count) : '' });
+
+  // The badge is one number; the tooltip says what it's made of.
+  const parts = [];
+  if (dupes) parts.push(`${dupes} duplicate${dupes === 1 ? '' : 's'}`);
+  if (done) parts.push(`${done} finished page${done === 1 ? '' : 's'}`);
+  chrome.action.setTitle({
+    title: parts.length ? `Tab De-Clutter — ${parts.join(' · ')}` : 'Tab De-Clutter',
+  });
+  return count;
+}
+
+/**
+ * Tab events arrive in bursts (opening a window, restoring a session), so the
+ * recount is debounced rather than run per event.
+ */
+function scheduleBadge() {
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => {
+    refreshBadge().catch((e) => console.warn(`${LOG} badge refresh failed: ${e.message}`));
+  }, BADGE_DEBOUNCE_MS);
+}
+
 function flashBadge(count) {
-  chrome.action.setBadgeBackgroundColor({ color: '#8A37F4' });
+  chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
   chrome.action.setBadgeText({ text: count ? `-${count}` : '0' });
-  setTimeout(() => chrome.action.setBadgeText({ text: '' }), 3000);
+  setTimeout(() => {
+    refreshBadge().catch(() => chrome.action.setBadgeText({ text: '' }));
+  }, 3000);
+}
+
+// --- merge windows -----------------------------------------------------------
+
+/**
+ * Pull every other normal window's tabs into one. Chrome's own Window menu can
+ * merge, but it drags along tabs you'd rather leave grouped — this respects the
+ * same "don't yank a tab out of its group" rule as everything else here.
+ */
+export async function mergeWindows(targetWindowId) {
+  const settings = await getSettings();
+  const windows = await chrome.windows.getAll({ populate: true, windowTypes: ['normal'] });
+
+  let target = targetWindowId;
+  if (target == null || !windows.some((w) => w.id === target)) {
+    const current = await chrome.windows.getCurrent();
+    target = current.id;
+  }
+  if (windows.length < 2) return { merged: 0, windows: 0, skipped: 0 };
+
+  let merged = 0;
+  let skipped = 0;
+  let sources = 0;
+
+  for (const win of windows) {
+    if (win.id === target) continue;
+
+    const movable = [];
+    for (const tab of win.tabs || []) {
+      if (settings.respectGroups && tab.groupId != null && tab.groupId !== -1) {
+        skipped += 1;
+        continue;
+      }
+      movable.push(tab);
+    }
+    if (!movable.length) continue;
+
+    // Chrome keeps pinned tabs at the front of the strip, so they move separately
+    // and get re-pinned — a cross-window move drops the pin otherwise.
+    const pinned = movable.filter((t) => t.pinned).map((t) => t.id);
+    const rest = movable.filter((t) => !t.pinned).map((t) => t.id);
+
+    try {
+      if (pinned.length) {
+        await chrome.tabs.move(pinned, { windowId: target, index: 0 });
+        for (const id of pinned) await chrome.tabs.update(id, { pinned: true });
+      }
+      if (rest.length) await chrome.tabs.move(rest, { windowId: target, index: -1 });
+      merged += movable.length;
+      sources += 1;
+    } catch (e) {
+      console.warn(`${LOG} merge from window ${win.id} failed: ${e.message}`);
+    }
+  }
+
+  try {
+    await chrome.windows.update(target, { focused: true });
+  } catch {
+    // The target window went away mid-merge; the tabs still moved.
+  }
+
+  console.log(`${LOG} merged ${merged} tab(s) from ${sources} window(s), ${skipped} left grouped`);
+  scheduleBadge();
+  return { merged, windows: sources, skipped };
 }
 
 // --- closing with an undo trail ---------------------------------------------
@@ -619,54 +740,59 @@ export async function findTabs(query) {
   return { query, count: results.length, results };
 }
 
-// --- grouping ----------------------------------------------------------------
+// --- finished pages ----------------------------------------------------------
 
 /**
- * Collapse a set of tabs into a named Chrome tab group instead of closing them.
+ * Tabs whose job is already done: Slack permalinks that handed off to the app,
+ * "you can close this tab" connector pages, ended Meet calls.
  *
- * chrome.tabs.group only works within one window, so a trail that spans windows
- * becomes one identically-named group per window rather than an error.
+ * These are the one category confident enough to auto-close, because the page
+ * itself is telling us it's finished — but it still ships suggest-only, and every
+ * close goes through the undo trail.
  */
-export async function groupIds(ids, label) {
-  const tabs = await normalTabs();
-  const { eligible, skipped } = groupableTabs(tabs, ids || []);
-  if (!eligible.length) {
-    console.log(`${LOG} group: nothing groupable (${skipped.length} pinned)`);
-    return { groups: 0, grouped: 0, skipped: skipped.length, title: '' };
-  }
-
-  const title = label || groupTitle(eligible);
-  const color = colorForTitle(title);
-
-  let groups = 0;
-  let grouped = 0;
-  for (const [, tabIds] of partitionByWindow(eligible)) {
-    try {
-      const groupId = await chrome.tabs.group({ tabIds });
-      await chrome.tabGroups.update(groupId, { title, color, collapsed: true });
-      groups += 1;
-      grouped += tabIds.length;
-    } catch (e) {
-      console.warn(`${LOG} group failed: ${e.message}`);
-    }
-  }
-
-  console.log(`${LOG} grouped ${grouped} tab(s) as "${title}" into ${groups} group(s)`);
-  flashBadge(0);
-  chrome.action.setBadgeText({ text: String(grouped) });
-  setTimeout(() => chrome.action.setBadgeText({ text: '' }), 3000);
-  return { groups, grouped, skipped: skipped.length, title };
-}
-
-export async function groupRelated(seedTabId) {
+export async function finishedReport() {
   const settings = await getSettings();
-  const [tabs, { parentOf, meta }] = await Promise.all([normalTabs(), intelMaps()]);
-  const { ids } = relatedCluster(tabs, parentOf, seedTabId, {
-    ...clusterOptions(settings),
-    meta,
-  });
-  return groupIds(ids, null);
+  const tabs = await normalTabs();
+  const items = finishedTabs(tabs, settings, Date.now());
+  return { count: items.length, items, scanned: tabs.length };
 }
+
+export async function closeFinished() {
+  const { items } = await finishedReport();
+  return closeWithUndo(items.map((i) => i.id), 'finished pages');
+}
+
+const AUTO_CLOSE_ALARM = 'declutter-auto-close';
+
+/**
+ * Auto-close runs on a timer, not on tab events: a Meet call going quiet and a
+ * hand-off page ageing out are both things that happen while nothing happens.
+ */
+async function autoCloseTick() {
+  const settings = await getSettings();
+  if (!settings.autoCloseFinished) return;
+
+  const tabs = await normalTabs();
+  const items = finishedTabs(tabs, settings, Date.now());
+  // Only act on pages that have been finished for a moment — closing a hand-off
+  // page the instant it loads would race the app it is handing off to.
+  const grace = Math.max(3, Number(settings.autoCloseAfterSeconds) || 8) * 1000;
+  const now = Date.now();
+  const ripe = items.filter((i) => i.lastAccessed && now - i.lastAccessed >= grace);
+  if (!ripe.length) return;
+
+  console.log(`${LOG} auto-closing ${ripe.length} finished page(s)`);
+  await closeWithUndo(ripe.map((i) => i.id), 'auto-close finished');
+}
+
+function scheduleAutoClose() {
+  chrome.alarms.create(AUTO_CLOSE_ALARM, { periodInMinutes: 1, delayInMinutes: 1 });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== AUTO_CLOSE_ALARM) return;
+  autoCloseTick().catch((e) => console.warn(`${LOG} auto-close failed: ${e.message}`));
+});
 
 // --- clutter review ----------------------------------------------------------
 
@@ -763,12 +889,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     relatedReport(msg.tabId).then(respond);
     return true;
   }
-  if (msg.type === 'find') {
-    findTabs(msg.query || '').then(respond);
+  if (msg.type === 'finished') {
+    finishedReport().then(respond);
     return true;
   }
-  if (msg.type === 'groupIds') {
-    groupIds(msg.ids || [], msg.label || null).then(respond);
+  if (msg.type === 'closeFinished') {
+    closeFinished().then((count) => respond({ count }));
+    return true;
+  }
+  if (msg.type === 'mergeWindows') {
+    mergeWindows(msg.windowId).then(respond);
+    return true;
+  }
+  if (msg.type === 'find') {
+    findTabs(msg.query || '').then(respond);
     return true;
   }
   if (msg.type === 'takeSeed') {
@@ -785,9 +919,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
 const MENU_ITEMS = [
   { id: 'sweep-window', title: 'Close duplicate tabs in this window', contexts: ['action'] },
   { id: 'sweep-all', title: 'Close duplicate tabs in all windows', contexts: ['action'] },
+  { id: 'close-finished', title: 'Close finished pages', contexts: ['action'] },
+  { id: 'merge-windows', title: 'Merge all windows into this one', contexts: ['action'] },
   { id: 'undo-last-close', title: 'Undo close', contexts: ['action'], enabled: false },
   { id: 'review-related', title: 'Review related tabs…', contexts: ['tab'] },
-  { id: 'group-related', title: 'Group related tabs', contexts: ['tab'] },
   { id: 'close-related', title: 'Close related tabs', contexts: ['tab'] },
   { id: 'close-same-site', title: 'Close other tabs from this site', contexts: ['tab'] },
   { id: 'close-duplicates-tab', title: 'Close duplicate tabs', contexts: ['tab'] },
@@ -801,11 +936,22 @@ function createMenus() {
 
 chrome.runtime.onInstalled.addListener((details) => {
   createMenus();
+  scheduleBadge();
+  scheduleAutoClose();
   console.log(`${LOG} installed (${details.reason})`);
 });
 
 // Menus live only as long as the browser session, so rebuild them on startup too.
-chrome.runtime.onStartup.addListener(createMenus);
+chrome.runtime.onStartup.addListener(() => {
+  createMenus();
+  scheduleBadge();
+  scheduleAutoClose();
+});
+
+// Turning the badge off in settings should clear it immediately.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.liveBadge) scheduleBadge();
+});
 
 async function reviewRelated(seedTabId) {
   await stashSeed(seedTabId);
@@ -835,14 +981,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     case 'review-related':
       if (tab) await reviewRelated(tab.id);
       break;
-    case 'group-related':
-      if (tab) await groupRelated(tab.id);
-      break;
     case 'close-related':
       if (tab) await closeRelatedTabs(tab.id);
       break;
     case 'close-same-site':
       if (tab) await closeSameSiteTabs(tab.id);
+      break;
+    case 'close-finished':
+      await closeFinished();
+      break;
+    case 'merge-windows':
+      await mergeWindows(windowId);
       break;
     case 'undo-last-close':
       await undoLastClose();
